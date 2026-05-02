@@ -373,6 +373,30 @@ def _is_ollama_running() -> bool:
         return False
 
 
+def _extract_json(raw: str) -> dict:
+    """Robustly extract JSON from LLM response, handling markdown fences and malformed JSON."""
+    import re as _re
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        stripped = stripped.strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        json_match = _re.search(r'\{[^{}]*"operations"[\s\S]*\}', stripped)
+        if json_match:
+            try:
+                return json.loads(json_match.group())
+            except json.JSONDecodeError:
+                cleaned = _re.sub(r',\s*([}\]])', r'\1', json_match.group())
+                return json.loads(cleaned)
+        raise
+
+
 def _plan_with_llm_backend(
     analysis: VideoAnalysis,
     instruction: str,
@@ -450,15 +474,7 @@ def _plan_with_ollama(
     raw = result.get("message", {}).get("content", "")
     if not raw:
         raise ValueError("Ollama returned empty response")
-    stripped = raw.strip()
-    if stripped.startswith("```"):
-        first_newline = stripped.find("\n")
-        if first_newline != -1:
-            stripped = stripped[first_newline + 1:]
-        if stripped.endswith("```"):
-            stripped = stripped[:-3]
-        stripped = stripped.strip()
-    data = json.loads(stripped)
+    data = _extract_json(raw)
     return _parse_llm_response(data, instruction)
 
 
@@ -484,7 +500,7 @@ def _plan_with_gemini(
     raw = result["candidates"][0]["content"]["parts"][0]["text"]
     if not raw:
         raise ValueError("Gemini returned empty response")
-    data = json.loads(raw)
+    data = _extract_json(raw)
     return _parse_llm_response(data, instruction)
 
 
@@ -581,7 +597,7 @@ def _plan_with_llm(
         raise ValueError("LLM returned empty response")
 
     logger.debug("LLM raw response: %s", raw[:500])
-    data = json.loads(raw)
+    data = _extract_json(raw)
 
     return _parse_llm_response(data, instruction)
 
