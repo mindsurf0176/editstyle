@@ -82,6 +82,8 @@ def generate_reels(
         scenes, count, target_duration, video_path, str(reel_dir),
     )
 
+    segment_map = _assign_scenes_to_segments(scenes, specs)
+
     results = []
     for spec in specs:
         logger.info(
@@ -90,10 +92,7 @@ def generate_reels(
             spec.segment_start, spec.segment_end, spec.target_duration,
         )
 
-        segment_scenes = [
-            s for s in scenes
-            if s.start_time >= spec.segment_start and s.end_time <= spec.segment_end
-        ]
+        segment_scenes = segment_map.get(spec.index, [])
 
         if not segment_scenes:
             logger.warning("Reel %d: no scenes in segment, skipping", spec.index + 1)
@@ -172,13 +171,11 @@ def generate_reel_plans_only(
         scenes = list(analysis.scenes)
 
     specs = _split_into_reel_specs(scenes, count, target_duration, "", "")
+    segment_map = _assign_scenes_to_segments(scenes, specs)
 
     plans = []
     for spec in specs:
-        segment_scenes = [
-            s for s in scenes
-            if s.start_time >= spec.segment_start and s.end_time <= spec.segment_end
-        ]
+        segment_scenes = segment_map.get(spec.index, [])
 
         if not segment_scenes:
             continue
@@ -262,30 +259,28 @@ def _split_into_reel_specs(
 ) -> list[ReelSpec]:
     """Divide the video timeline into non-overlapping segments for reel generation.
 
-    Uses scene boundaries (not arbitrary timestamps) to ensure cuts happen
-    on scene edges, preventing corrupted scenes.
+    Splits the timeline into ``count`` equal segments. Scenes that overlap
+    with a segment are assigned to that segment. For long scenes that span
+    multiple segments, the scene is assigned to the segment that contains
+    its midpoint.
 
-    The total duration is split into ``count`` roughly equal segments,
-    and boundaries are adjusted to the nearest scene edge.
+    This handles videos with very few scenes (e.g. chess streams) by
+    using time-based segments rather than relying solely on scene boundaries.
     """
     if not scenes:
         return []
 
-    total_duration = scenes[-1].end_time - scenes[0].start_time
+    video_start = scenes[0].start_time
+    video_end = scenes[-1].end_time
+    total_duration = video_end - video_start
     segment_size = total_duration / count
 
     specs: list[ReelSpec] = []
     video_stem = Path(video_path).stem if video_path else "video"
 
     for i in range(count):
-        raw_start = scenes[0].start_time + i * segment_size
-        raw_end = scenes[0].start_time + (i + 1) * segment_size
-
-        seg_start = _snap_to_scene_boundary(scenes, raw_start, direction="nearest")
-        seg_end = _snap_to_scene_boundary(scenes, raw_end, direction="nearest")
-
-        if seg_start >= seg_end:
-            continue
+        seg_start = video_start + i * segment_size
+        seg_end = video_start + (i + 1) * segment_size
 
         output_name = f"{video_stem}_reel_{i + 1}.mp4"
         output_path = str(Path(output_dir) / output_name) if output_dir else output_name
@@ -301,38 +296,37 @@ def _split_into_reel_specs(
     return specs
 
 
-def _snap_to_scene_boundary(
+def _assign_scenes_to_segments(
     scenes: list[SceneInfo],
-    timestamp: float,
-    direction: str = "nearest",
-) -> float:
-    """Snap a timestamp to the nearest scene boundary.
+    specs: list[ReelSpec],
+) -> dict[int, list[SceneInfo]]:
+    """Assign each scene to the segment that contains its midpoint.
 
-    Args:
-        scenes: List of scenes to snap to.
-        timestamp: The target timestamp.
-        direction: "nearest", "left" (start of scene), or "right" (end of scene).
-
-    Returns:
-        The snapped timestamp.
+    This ensures every scene is assigned to exactly one segment, even if
+    the scene spans multiple segments (long scenes in videos with few cuts).
     """
-    best_time = timestamp
-    best_dist = float("inf")
+    result: dict[int, list[SceneInfo]] = {s.index: [] for s in specs}
 
     for scene in scenes:
-        for boundary in (scene.start_time, scene.end_time):
-            dist = abs(boundary - timestamp)
-            if direction == "left" and boundary <= timestamp and dist < best_dist:
-                best_time = boundary
-                best_dist = dist
-            elif direction == "right" and boundary >= timestamp and dist < best_dist:
-                best_time = boundary
-                best_dist = dist
-            elif direction == "nearest" and dist < best_dist:
-                best_time = boundary
-                best_dist = dist
+        midpoint = (scene.start_time + scene.end_time) / 2
+        best_spec = specs[0]
+        best_overlap = 0.0
 
-    return best_time
+        for spec in specs:
+            overlap_start = max(midpoint, spec.segment_start)
+            overlap_end = min(midpoint, spec.segment_end)
+            if overlap_start <= overlap_end:
+                overlap = overlap_end - overlap_start
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_spec = spec
+
+        result[best_spec.index].append(scene)
+
+    for idx in result:
+        result[idx].sort(key=lambda s: s.start_time)
+
+    return result
 
 
 def _strategy_best_moments(
