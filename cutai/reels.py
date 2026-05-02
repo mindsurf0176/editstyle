@@ -14,15 +14,14 @@ from __future__ import annotations
 
 import logging
 import math
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cutai.models.types import CutOperation, EditOperation, EditPlan
+from cutai.models.types import CutOperation, EditOperation, EditPlan, SceneInfo
 
 if TYPE_CHECKING:
-    from cutai.models.types import EngagementReport, SceneInfo, VideoAnalysis
+    from cutai.models.types import EngagementReport, VideoAnalysis
 
 logger = logging.getLogger(__name__)
 
