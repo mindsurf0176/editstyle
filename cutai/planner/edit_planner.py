@@ -450,7 +450,15 @@ def _plan_with_ollama(
     raw = result.get("message", {}).get("content", "")
     if not raw:
         raise ValueError("Ollama returned empty response")
-    data = json.loads(raw)
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        stripped = stripped.strip()
+    data = json.loads(stripped)
     return _parse_llm_response(data, instruction)
 
 
