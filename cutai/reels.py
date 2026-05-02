@@ -319,25 +319,33 @@ def _ensure_enough_scenes(
     min_count: int,
     max_subdivision: float = 60.0,
 ) -> list[SceneInfo]:
-    """Subdivide long scenes so we have at least ``min_count`` scenes.
+    """Subdivide long scenes so every segment has usable content.
 
     Videos like chess streams or screen recordings may have very few
     scene changes. This splits scenes longer than ``max_subdivision``
     into equal chunks so every reel segment has content to work with.
+
+    Always subdivides scenes exceeding ``max_subdivision``, even if
+    the total scene count already exceeds ``min_count``.
     """
-    if len(scenes) >= min_count:
+    needs_subdivision = any(s.duration > max_subdivision for s in scenes)
+
+    if not needs_subdivision and len(scenes) >= min_count:
         return scenes
 
-    logger.info(
-        "Only %d scenes detected for %d reels — subdividing long scenes",
-        len(scenes), min_count,
-    )
+    if needs_subdivision:
+        logger.info("Subdividing %d long scene(s) (>%.0fs)", sum(1 for s in scenes if s.duration > max_subdivision), max_subdivision)
+    else:
+        logger.info(
+            "Only %d scenes detected for %d reels — subdividing long scenes",
+            len(scenes), min_count,
+        )
 
     subdivided: list[SceneInfo] = []
     next_id = 0
 
     for scene in scenes:
-        if scene.duration > max_subdivision and len(subdivided) < min_count:
+        if scene.duration > max_subdivision:
             n_chunks = max(2, int(math.ceil(scene.duration / max_subdivision)))
             chunk_duration = scene.duration / n_chunks
 
@@ -433,19 +441,16 @@ def _assign_scenes_to_segments(
 
     for scene in scenes:
         midpoint = (scene.start_time + scene.end_time) / 2
-        best_spec = specs[0]
-        best_overlap = 0.0
 
+        assigned = False
         for spec in specs:
-            overlap_start = max(midpoint, spec.segment_start)
-            overlap_end = min(midpoint, spec.segment_end)
-            if overlap_start <= overlap_end:
-                overlap = overlap_end - overlap_start
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_spec = spec
+            if spec.segment_start <= midpoint < spec.segment_end:
+                result[spec.index].append(scene)
+                assigned = True
+                break
 
-        result[best_spec.index].append(scene)
+        if not assigned:
+            result[specs[-1].index].append(scene)
 
     for idx in result:
         result[idx].sort(key=lambda s: s.start_time)
