@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import math
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -77,6 +78,8 @@ def generate_reels(
     scenes = [s for s in analysis.scenes if s.duration >= min_scene_duration]
     if not scenes:
         scenes = list(analysis.scenes)
+
+    scenes = _ensure_enough_scenes(scenes, count)
 
     specs = _split_into_reel_specs(
         scenes, count, target_duration, video_path, str(reel_dir),
@@ -170,6 +173,8 @@ def generate_reel_plans_only(
     if not scenes:
         scenes = list(analysis.scenes)
 
+    scenes = _ensure_enough_scenes(scenes, count)
+
     specs = _split_into_reel_specs(scenes, count, target_duration, "", "")
     segment_map = _assign_scenes_to_segments(scenes, specs)
 
@@ -248,6 +253,66 @@ def format_time(seconds: float) -> str:
     m = int(seconds) // 60
     s = int(seconds) % 60
     return f"{m}:{s:02d}"
+
+
+def _ensure_enough_scenes(
+    scenes: list[SceneInfo],
+    min_count: int,
+    max_subdivision: float = 60.0,
+) -> list[SceneInfo]:
+    """Subdivide long scenes so we have at least ``min_count`` scenes.
+
+    Videos like chess streams or screen recordings may have very few
+    scene changes. This splits scenes longer than ``max_subdivision``
+    into equal chunks so every reel segment has content to work with.
+    """
+    if len(scenes) >= min_count:
+        return scenes
+
+    logger.info(
+        "Only %d scenes detected for %d reels — subdividing long scenes",
+        len(scenes), min_count,
+    )
+
+    subdivided: list[SceneInfo] = []
+    next_id = 0
+
+    for scene in scenes:
+        if scene.duration > max_subdivision and len(subdivided) < min_count:
+            n_chunks = max(2, int(math.ceil(scene.duration / max_subdivision)))
+            chunk_duration = scene.duration / n_chunks
+
+            for j in range(n_chunks):
+                chunk_start = scene.start_time + j * chunk_duration
+                chunk_end = scene.start_time + (j + 1) * chunk_duration
+                if j == n_chunks - 1:
+                    chunk_end = scene.end_time
+
+                subdivided.append(SceneInfo(
+                    id=next_id,
+                    start_time=chunk_start,
+                    end_time=chunk_end,
+                    duration=chunk_end - chunk_start,
+                    has_speech=scene.has_speech,
+                    is_silent=scene.is_silent,
+                    transcript=scene.transcript,
+                    avg_energy=scene.avg_energy,
+                ))
+                next_id += 1
+        else:
+            subdivided.append(SceneInfo(
+                id=next_id,
+                start_time=scene.start_time,
+                end_time=scene.end_time,
+                duration=scene.duration,
+                has_speech=scene.has_speech,
+                is_silent=scene.is_silent,
+                transcript=scene.transcript,
+                avg_energy=scene.avg_energy,
+            ))
+            next_id += 1
+
+    return subdivided
 
 
 def _split_into_reel_specs(
