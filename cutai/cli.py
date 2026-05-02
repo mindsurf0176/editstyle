@@ -257,6 +257,11 @@ def edit(
     burn_subtitles: bool = typer.Option(True, "--burn-subtitles/--sidecar-subtitles", help="Burn subtitles into video by default. Use --sidecar-subtitles to save a .ass sidecar instead"),
     style: str | None = typer.Option(None, "--style", "-s", help="Edit DNA style file (.yaml) to apply instead of instruction-based planning"),
     editstyle: str | None = typer.Option(None, "--editstyle", help="EDITSTYLE.md file to use (auto-detected if not specified)"),
+    narrate: bool = typer.Option(False, "--narrate", help="Add AI voiceover narration to the output"),
+    narrate_tone: str = typer.Option("documentary", "--narrate-tone", help="Narration tone preset"),
+    narrate_lang: str = typer.Option("English", "--narrate-lang", help="Narration language"),
+    narrate_audio_mode: str = typer.Option("voiceover", "--narrate-audio-mode", help="Narration audio mode: voiceover or replace"),
+    narrate_voice: str | None = typer.Option(None, "--narrate-voice", help="Edge TTS voice name"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
     """Full pipeline: analyze → plan → edit → render.
@@ -360,6 +365,35 @@ def edit(
 
         _display_analysis(analysis)
         _display_plan(edit_plan)
+
+        # Step 4: Add narration if requested
+        if narrate:
+            from cutai.narrator import generate_narration as gen_narr
+
+            console.print(Panel("🎙️ Adding AI narration...", style="cyan"))
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                t4 = progress.add_task("Generating narration...", total=None)
+                narr_result = gen_narr(
+                    video_path=str(video_path),
+                    analysis=analysis,
+                    tone=narrate_tone,
+                    language=narrate_lang,
+                    voice=narrate_voice,
+                    audio_mode=narrate_audio_mode,
+                    output_path=output,
+                    llm_model=llm,
+                    use_llm=not no_llm,
+                )
+                progress.update(t4, completed=True)
+
+            console.print(
+                f"  🎙️ {narr_result['narrations_count']} segments narrated"
+            )
+            result = narr_result["output_path"]
 
         # Build success message
         success_lines = [
@@ -1231,6 +1265,98 @@ def agent(
             f"🔄 Iterations: {result.total_iterations}",
             style="green",
         ))
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# ── AI Narration ────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def narrate(
+    video: str = typer.Argument(help="Path to the video file"),
+    tone: str = typer.Option("documentary", "--tone", "-t", help="Narration tone: documentary, calm, excited, sad, happy, serious, funny, teacher, or custom"),
+    language: str = typer.Option("English", "--language", "-l", help="Language for narration"),
+    voice: str | None = typer.Option(None, "--voice", help="Edge TTS voice name (auto-selects based on language)"),
+    audio_mode: str = typer.Option("voiceover", "--audio-mode", help="Audio mode: voiceover (mix) or replace"),
+    custom_prompt: str | None = typer.Option(None, "--custom-prompt", help="Custom tone/style instruction for narration"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output video path"),
+    model: str = typer.Option("base", "--model", "-m", help="Whisper model size"),
+    llm: str = typer.Option("auto", "--llm", help="LLM model for script generation"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Use transcript directly as narration (no LLM)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+) -> None:
+    """Generate AI voiceover narration for a video.
+
+    Analyzes scenes, generates context-aware narration text using LLM,
+    converts to natural speech via Edge TTS (free), and mixes onto the video.
+
+    Examples:
+        cutai narrate video.mp4
+        cutai narrate video.mp4 --tone documentary
+        cutai narrate video.mp4 --tone "excited sports commentator"
+        cutai narrate video.mp4 --audio-mode replace --tone calm
+        cutai narrate video.mp4 --language Japanese --tone documentary
+        cutai narrate video.mp4 --no-llm
+    """
+    _setup_logging(verbose)
+    video_path = _validate_video(video)
+
+    if not output:
+        stem = video_path.stem
+        output = str(video_path.parent / f"{stem}_narrated.mp4")
+
+    try:
+        desc = (
+            f"🎙️ Narrating [bold]{video_path.name}[/bold]\n"
+            f"Tone: [italic]{tone}[/italic]\n"
+            f"Language: {language}\n"
+            f"Audio: [italic]{audio_mode}[/italic]\n"
+            f"📁 Output: [dim]{output}[/dim]"
+        )
+
+        console.print(Panel(desc, style="blue"))
+
+        from cutai.analyzer import analyze_video
+        from cutai.narrator import generate_narration as gen_narr
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            t1 = progress.add_task("Step 1/3: Analyzing video...", total=None)
+            analysis = analyze_video(
+                str(video_path),
+                whisper_model=model,
+            )
+            progress.update(t1, completed=True)
+
+            t2 = progress.add_task("Step 2/3: Generating narration + speech...", total=None)
+            result = gen_narr(
+                video_path=str(video_path),
+                analysis=analysis,
+                tone=tone,
+                language=language,
+                custom_prompt=custom_prompt,
+                voice=voice,
+                audio_mode=audio_mode,
+                output_path=output,
+                llm_model=llm,
+                use_llm=not no_llm,
+            )
+            progress.update(t2, completed=True)
+
+        console.print()
+        console.print(Panel(
+            f"✅ [bold green]Narration complete![/bold green]\n"
+            f"📁 Output: [bold]{result['output_path']}[/bold]\n"
+            f"🎙️ Segments narrated: {result['narrations_count']}",
+            style="green",
+        ))
+
     except typer.Exit:
         raise
     except Exception as exc:
