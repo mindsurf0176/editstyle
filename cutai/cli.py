@@ -1245,7 +1245,7 @@ def reels(
     video: str = typer.Argument(help="Path to the video file"),
     count: int = typer.Option(3, "--count", "-n", help="Number of reels to generate"),
     duration: float | None = typer.Option(None, "--duration", "-d", help="Target duration per reel in seconds"),
-    output: str = typer.Option("reels", "--output", "-o", help="Output directory for reel files"),
+    output: str = typer.Option("output", "--output", "-o", help="Output directory (reels go in output/<video_name>/)"),
     style: str = typer.Option("best-moments", "--style", "-s", help="Highlight strategy: best-moments, narrative, shorts"),
     model: str = typer.Option("base", "--model", "-m", help="Whisper model size"),
     no_render: bool = typer.Option(False, "--no-render", help="Only show plans, don't render"),
@@ -1313,7 +1313,7 @@ def reels(
             f"[bold]{video_path.name}[/bold]\n"
             f"Duration: {analysis.duration:.0f}s | "
             f"Target per reel: {duration:.0f}s\n"
-            f"Output: [dim]{output}/[/dim]",
+            f"Output: [dim]{output}/{video_path.stem}/[/dim]",
             style="blue",
             title="Multi-Reel Generator",
         ))

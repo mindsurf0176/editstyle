@@ -66,7 +66,9 @@ def generate_reels(
     Returns:
         List of dicts with reel info (path, plan, duration, scenes).
     """
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    video_stem = Path(video_path).stem
+    reel_dir = Path(output_dir) / video_stem
+    reel_dir.mkdir(parents=True, exist_ok=True)
 
     score_map: dict[int, float] = {
         se.scene_id: se.score for se in engagement.scenes
@@ -77,7 +79,7 @@ def generate_reels(
         scenes = list(analysis.scenes)
 
     specs = _split_into_reel_specs(
-        scenes, count, target_duration, video_path, output_dir,
+        scenes, count, target_duration, video_path, str(reel_dir),
     )
 
     results = []
