@@ -1237,6 +1237,142 @@ def agent(
         _handle_error(exc)
 
 
+# ── Multi-Reel Generator ─────────────────────────────────────────────────────
+
+
+@app.command()
+def reels(
+    video: str = typer.Argument(help="Path to the video file"),
+    count: int = typer.Option(3, "--count", "-n", help="Number of reels to generate"),
+    duration: float | None = typer.Option(None, "--duration", "-d", help="Target duration per reel in seconds"),
+    output: str = typer.Option("reels", "--output", "-o", help="Output directory for reel files"),
+    style: str = typer.Option("best-moments", "--style", "-s", help="Highlight strategy: best-moments, narrative, shorts"),
+    model: str = typer.Option("base", "--model", "-m", help="Whisper model size"),
+    no_render: bool = typer.Option(False, "--no-render", help="Only show plans, don't render"),
+    burn_subtitles: bool = typer.Option(True, "--burn-subtitles/--sidecar-subtitles", help="Burn subtitles into video"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+) -> None:
+    """Generate multiple distinct highlight reels from a single video.
+
+    Splits the video into non-overlapping segments and creates a highlight reel
+    from each segment. Each reel covers a different part of the video so you
+    get variety — perfect for social media uploads.
+
+    The video is divided evenly, with boundaries snapped to scene edges
+    to prevent corrupted cuts.
+
+    Examples:
+        cutai reels video.mp4
+        cutai reels video.mp4 -n 5 -d 60
+        cutai reels video.mp4 -n 4 -d 90 -o my_reels/
+        cutai reels video.mp4 -n 3 --no-render
+    """
+    _setup_logging(verbose)
+    video_path = _validate_video(video)
+
+    try:
+        from cutai.analyzer import analyze_with_engagement
+        from cutai.reels import generate_reels, suggest_reel_count, suggest_reel_duration
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            t1 = progress.add_task("Step 1/3: Analyzing video + engagement...", total=None)
+            analysis, report = analyze_with_engagement(
+                str(video_path), whisper_model=model,
+            )
+            progress.update(t1, completed=True)
+
+            if duration is None:
+                duration = suggest_reel_duration(analysis.duration, count)
+                console.print(
+                    f"[dim]Auto target duration: {duration:.0f}s per reel[/dim]"
+                )
+
+            t2 = progress.add_task("Step 2/3: Planning reels...", total=None)
+            reel_specs = generate_reels(
+                video_path=str(video_path),
+                analysis=analysis,
+                engagement=report,
+                count=count,
+                target_duration=duration,
+                output_dir=output,
+                burn_subtitles=burn_subtitles,
+            )
+            progress.update(t2, completed=True)
+
+        if not reel_specs:
+            console.print("[red]Error:[/red] Could not generate any reels.")
+            raise typer.Exit(1)
+
+        console.print()
+        console.print(Panel(
+            f"Generating [bold]{len(reel_specs)}[/bold] reels from "
+            f"[bold]{video_path.name}[/bold]\n"
+            f"Duration: {analysis.duration:.0f}s | "
+            f"Target per reel: {duration:.0f}s\n"
+            f"Output: [dim]{output}/[/dim]",
+            style="blue",
+            title="Multi-Reel Generator",
+        ))
+
+        for spec in reel_specs:
+            plan = spec["plan"]
+            console.print(f"\n  [bold]Reel {spec['index'] + 1}[/bold]: "
+                          f"{spec['scene_count']} scenes, "
+                          f"{spec['estimated_duration']:.1f}s")
+            console.print(f"    Segment: {plan.summary}")
+
+        if no_render:
+            console.print("\n[yellow]--no-render: skipping render step[/yellow]")
+            console.print("\nTo render all reels, re-run without --no-render.")
+        else:
+            from cutai.editor.renderer import render
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                for i, spec in enumerate(reel_specs):
+                    task = progress.add_task(
+                        f"Rendering reel {i + 1}/{len(reel_specs)}...",
+                        total=None,
+                    )
+                    try:
+                        render(
+                            str(video_path),
+                            spec["plan"],
+                            analysis,
+                            spec["output_path"],
+                            burn_subtitles=burn_subtitles,
+                        )
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]Reel {i + 1} failed: {e}[/yellow]"
+                        )
+                    progress.update(task, completed=True)
+
+            console.print()
+            console.print(Panel(
+                "[bold green]All reels generated![/bold green]\n\n" +
+                "\n".join(
+                    f"  Reel {s['index'] + 1}: [bold]{s['output_path']}[/bold]"
+                    f" ({s['estimated_duration']:.1f}s)"
+                    for s in reel_specs
+                ),
+                style="green",
+                title="Multi-Reel Complete",
+            ))
+
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        _handle_error(exc)
+
+
 # ── MCP Server ───────────────────────────────────────────────────────────────
 
 
