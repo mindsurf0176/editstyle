@@ -79,6 +79,7 @@ def generate_reels(
     if not scenes:
         scenes = list(analysis.scenes)
 
+    scenes = _fill_scene_gaps(scenes, analysis.duration)
     scenes = _ensure_enough_scenes(scenes, count)
 
     specs = _split_into_reel_specs(
@@ -173,6 +174,7 @@ def generate_reel_plans_only(
     if not scenes:
         scenes = list(analysis.scenes)
 
+    scenes = _fill_scene_gaps(scenes, analysis.duration)
     scenes = _ensure_enough_scenes(scenes, count)
 
     specs = _split_into_reel_specs(scenes, count, target_duration, "", "")
@@ -253,6 +255,64 @@ def format_time(seconds: float) -> str:
     m = int(seconds) // 60
     s = int(seconds) % 60
     return f"{m}:{s:02d}"
+
+
+def _fill_scene_gaps(
+    scenes: list[SceneInfo],
+    total_duration: float,
+) -> list[SceneInfo]:
+    """Fill gaps in the scene list so the entire video timeline is covered.
+
+    Scene detectors sometimes miss content (e.g. slow static video).
+    This ensures the full video duration is represented in the scene list
+    so reels can be generated from every part of the video.
+    """
+    if not scenes:
+        return [SceneInfo(
+            id=0, start_time=0.0, end_time=total_duration,
+            duration=total_duration,
+        )]
+
+    filled: list[SceneInfo] = []
+    next_id = 0
+
+    for scene in scenes:
+        if filled:
+            last_end = filled[-1].end_time
+            if scene.start_time > last_end + 0.5:
+                gap_duration = scene.start_time - last_end
+                filled.append(SceneInfo(
+                    id=next_id,
+                    start_time=last_end,
+                    end_time=scene.start_time,
+                    duration=gap_duration,
+                    is_silent=True,
+                ))
+                next_id += 1
+
+        filled.append(SceneInfo(
+            id=next_id,
+            start_time=scene.start_time,
+            end_time=scene.end_time,
+            duration=scene.duration,
+            has_speech=scene.has_speech,
+            is_silent=scene.is_silent,
+            transcript=scene.transcript,
+            avg_energy=scene.avg_energy,
+        ))
+        next_id += 1
+
+    last_end = filled[-1].end_time
+    if total_duration > last_end + 0.5:
+        filled.append(SceneInfo(
+            id=next_id,
+            start_time=last_end,
+            end_time=total_duration,
+            duration=total_duration - last_end,
+            is_silent=True,
+        ))
+
+    return filled
 
 
 def _ensure_enough_scenes(
