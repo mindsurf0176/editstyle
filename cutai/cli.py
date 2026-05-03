@@ -262,6 +262,8 @@ def edit(
     narrate_lang: str = typer.Option("English", "--narrate-lang", help="Narration language"),
     narrate_audio_mode: str = typer.Option("voiceover", "--narrate-audio-mode", help="Narration audio mode: voiceover or replace"),
     narrate_voice: str | None = typer.Option(None, "--narrate-voice", help="Edge TTS voice name"),
+    narrate_vision: bool = typer.Option(False, "--narrate-vision", help="Use vision AI to understand video frames for better narration"),
+    narrate_vision_model: str | None = typer.Option(None, "--narrate-vision-model", help="Vision model for scene analysis (default: gemma4:31b-cloud)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
     """Full pipeline: analyze → plan → edit → render.
@@ -387,6 +389,8 @@ def edit(
                     output_path=output,
                     llm_model=llm,
                     use_llm=not no_llm,
+                    use_vision=narrate_vision,
+                    vision_model=narrate_vision_model,
                 )
                 progress.update(t4, completed=True)
 
@@ -1286,6 +1290,8 @@ def narrate(
     model: str = typer.Option("base", "--model", "-m", help="Whisper model size"),
     llm: str = typer.Option("auto", "--llm", help="LLM model for script generation"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Use transcript directly as narration (no LLM)"),
+    vision: bool = typer.Option(False, "--vision", help="Use vision AI to analyze video frames for context-aware narration"),
+    vision_model: str | None = typer.Option(None, "--vision-model", help="Vision model for scene analysis (default: gemma4:31b-cloud)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
     """Generate AI voiceover narration for a video.
@@ -1314,6 +1320,7 @@ def narrate(
             f"Tone: [italic]{tone}[/italic]\n"
             f"Language: {language}\n"
             f"Audio: [italic]{audio_mode}[/italic]\n"
+            f"Vision: {'enabled' if vision else 'disabled'}\n"
             f"📁 Output: [dim]{output}[/dim]"
         )
 
@@ -1346,6 +1353,8 @@ def narrate(
                 output_path=output,
                 llm_model=llm,
                 use_llm=not no_llm,
+                use_vision=vision,
+                vision_model=vision_model,
             )
             progress.update(t2, completed=True)
 

@@ -19,6 +19,8 @@ def generate_narration(
     output_path: str = "narrated.mp4",
     llm_model: str = "auto",
     use_llm: bool = True,
+    use_vision: bool = False,
+    vision_model: str | None = None,
 ) -> dict:
     """Generate narration for a video and apply it.
 
@@ -33,6 +35,8 @@ def generate_narration(
         output_path: Output video path.
         llm_model: LLM model for script generation.
         use_llm: Whether to use LLM for script generation.
+        use_vision: Whether to use vision model for scene understanding.
+        vision_model: Vision model name (defaults to gemma4:31b-cloud).
 
     Returns:
         Dict with "output_path", "narrations_count", "segments" info.
@@ -42,7 +46,18 @@ def generate_narration(
 
     logger = logging.getLogger(__name__)
 
-    logger.info("Generating narration script (tone=%s, language=%s)...", tone, language)
+    vision_descriptions = None
+    if use_vision:
+        from cutai.narrator.vision_analyzer import analyze_scenes
+
+        logger.info("Running vision analysis on scenes...")
+        vision_descriptions = analyze_scenes(
+            video_path=video_path,
+            analysis=analysis,
+            model=vision_model,
+        )
+
+    logger.info("Generating narration script (tone=%s, language=%s, vision=%s)...", tone, language, use_vision)
 
     narrations = generate_narration_script(
         analysis=analysis,
@@ -51,6 +66,7 @@ def generate_narration(
         custom_prompt=custom_prompt,
         llm_model=llm_model,
         use_llm=use_llm,
+        vision_descriptions=vision_descriptions,
     )
 
     narrations = [n for n in narrations if n.get("text", "").strip()]

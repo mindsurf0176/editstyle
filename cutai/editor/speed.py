@@ -58,6 +58,12 @@ def apply_speed(
         shutil.copy2(video_path, output_path)
         return output_path
 
+    if operation.end_time - operation.start_time < 0.05:
+        logger.warning("Speed region too short (%.1f-%.1f). Skipping.", operation.start_time, operation.end_time)
+        import shutil
+        shutil.copy2(video_path, output_path)
+        return output_path
+
     # Determine if this is a whole-video or partial speed change
     is_whole_video = (
         operation.start_time <= 0.05

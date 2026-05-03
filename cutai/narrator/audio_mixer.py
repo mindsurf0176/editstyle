@@ -6,6 +6,7 @@ Supports voiceover mode (mix with original) and replace mode (replace original).
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import tempfile
@@ -158,6 +159,7 @@ def _create_silent_narration(
         return output_path
 
     filter_parts = [f"anullsrc=channel_layout=stereo:sample_rate=44100:duration={duration}[bg]"]
+    n = len(segments)
 
     for i, seg in enumerate(segments):
         audio_path = seg["audio_path"]
@@ -171,7 +173,6 @@ def _create_silent_narration(
     for seg in segments:
         inputs.extend(["-i", seg["audio_path"]])
 
-    n = len(segments)
     cmd = [
         ffmpeg, "-y",
         *inputs,

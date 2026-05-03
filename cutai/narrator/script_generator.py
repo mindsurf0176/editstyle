@@ -22,14 +22,14 @@ SYSTEM_PROMPT = """You are a professional video narrator. Given scene informatio
 Rules:
 - Each narration should be 1-3 sentences (15-40 words)
 - Match the requested tone/style
-- Reference what's happening in the scene based on the transcript
-- If a scene has no transcript, describe what might be happening based on context
-- Keep narration natural and engaging — don't just recite facts
+- Reference what's VISUALLY happening in the scene based on the visual descriptions
+- If a scene has transcript, incorporate it naturally with the visual description
+- Keep narration natural and engaging — describe what the viewer is seeing
 - Use the specified language for narration
 - Do NOT add timestamps, labels, or formatting — just the narration text
-- If a scene is silent or has no speech, you can add contextual narration"""
+- Make the narration flow like a story — connect scenes logically"""
 
-TONE_INSTRUCTIONS: {
+TONE_INSTRUCTIONS = {
     "documentary": "Speak in a calm, informative documentary style. Explain what's happening with authority and clarity. Use measured pacing.",
     "calm": "Speak gently and peacefully. Create a soothing, meditative atmosphere. Use soft, descriptive language.",
     "excited": "Speak with high energy and enthusiasm! Use exclamations, rhetorical questions, and vivid language to build excitement.",
@@ -43,10 +43,14 @@ TONE_INSTRUCTIONS: {
 
 def _build_scene_summaries(
     analysis: VideoAnalysis,
+    vision_descriptions: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
     """Build compact summaries of each scene for the LLM prompt."""
     scenes = analysis.scenes
     summaries = []
+    vision_map = {}
+    if vision_descriptions:
+        vision_map = {v["id"]: v["visual_description"] for v in vision_descriptions}
 
     for i, scene in enumerate(scenes):
         position_pct = (scene.start_time / analysis.duration * 100) if analysis.duration > 0 else 0
@@ -58,7 +62,7 @@ def _build_scene_summaries(
         else:
             position_label = "ending"
 
-        summaries.append({
+        summary = {
             "id": i,
             "time": f"{scene.start_time:.1f}-{scene.end_time:.1f}s",
             "duration": f"{scene.duration:.1f}s",
@@ -67,7 +71,13 @@ def _build_scene_summaries(
             "is_silent": scene.is_silent,
             "transcript": (scene.transcript[:200] if scene.transcript else None),
             "energy": round(scene.avg_energy, 1) if scene.avg_energy else None,
-        })
+        }
+
+        visual_desc = vision_map.get(i, "")
+        if visual_desc:
+            summary["visual_description"] = visual_desc
+
+        summaries.append(summary)
 
     return summaries
 
@@ -79,6 +89,7 @@ def generate_narration_script(
     custom_prompt: str | None = None,
     llm_model: str = "gpt-4o",
     use_llm: bool = True,
+    vision_descriptions: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate narration text for each scene.
 
@@ -89,11 +100,12 @@ def generate_narration_script(
         custom_prompt: Optional custom tone/style instruction.
         llm_model: LLM model to use.
         use_llm: Whether to use LLM or generate rule-based narration.
+        vision_descriptions: Optional list of dicts with "id" and "visual_description".
 
     Returns:
         List of dicts with "id" and "text" keys.
     """
-    scene_summaries = _build_scene_summaries(analysis)
+    scene_summaries = _build_scene_summaries(analysis, vision_descriptions)
 
     if use_llm:
         return _generate_with_llm(scene_summaries, analysis, tone, language, custom_prompt, llm_model)
@@ -133,7 +145,10 @@ def _generate_with_llm(
 
     backend = _resolve_backend(config, llm_model)
 
-    if backend == "ollama":
+    if backend == "rule-based":
+        logger.info("No LLM backend available, falling back to rule-based narration")
+        return _generate_rule_based(scene_summaries)
+    elif backend == "ollama":
         raw = _call_ollama(system_prompt, user_message, config)
     else:
         raw = _call_openai(system_prompt, user_message, config, llm_model, backend)
@@ -162,15 +177,17 @@ def _resolve_backend(config, llm_model: str) -> str:
     if setting in ("auto",) or llm_model.startswith("gpt"):
         if config.openai_api_key:
             return "openai"
+        return "ollama"
 
-    return "ollama" if config.openai_api_key else "rule-based"
+    return "ollama"
 
 
 def _call_ollama(system_prompt: str, user_message: str, config) -> str:
     """Call Ollama API for narration generation."""
+    import os
     import urllib.request
 
-    model = config.ollama_model
+    model = os.environ.get("OLLAMA_MODEL", config.ollama_model)
     logger.info("Calling Ollama (%s) for narration script...", model)
 
     payload = json.dumps({
@@ -191,7 +208,7 @@ def _call_ollama(system_prompt: str, user_message: str, config) -> str:
         method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=180) as resp:
+    with urllib.request.urlopen(req, timeout=300) as resp:
         result = json.loads(resp.read())
 
     raw = result.get("message", {}).get("content", "")
