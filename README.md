@@ -21,6 +21,13 @@
 - **🎨 7 style presets** — cinematic, vlog, cooking, tech, music, podcast, shorts
 - **⚡ Performance** — MLX Whisper (Apple Silicon), VideoToolbox hwaccel, analysis cache
 
+### 🆕 Community contributions
+
+- **🎙️ AI Voiceover Narration** — `cutai narrate` generates context-aware voiceover using Edge TTS (free, no API key) with 8 tone presets and 11 languages. Add `--narrate` to any `cutai edit` command.
+- **🎬 Multi-Reel Generator** — `cutai reels` splits long videos into short, non-overlapping reels with scene-aware segmentation.
+- **🔧 Ollama JSON Fix** — robust JSON parsing that handles markdown fences and malformed responses from Ollama, OpenAI, and Gemini backends.
+- **👁️ Vision Analyzer** — extracts frames from scenes and sends them to Ollama vision models (Gemma 4, Mistral Large) for context-aware narration.
+
 ## Current status
 
 CutAI is in an **ambitious but practical alpha** stage.
@@ -71,6 +78,20 @@ $ cutai edit vlog.mp4 -i "remove boring parts, add subtitles, make it warm and c
 - **Color grading** — warm / bright / cool / cinematic style adjustments
 - **BGM mixing** — add background music when requested
 - **Transitions and speed controls** — available in the editing pipeline
+
+### AI Narration
+- **Voiceover generation** — `cutai narrate` adds AI voiceover to any video
+- **Edge TTS** — free, no API key required, 322 voices across 11 languages
+- **Tone presets** — documentary, calm, excited, sad, happy, serious, funny, teacher
+- **Voiceover or replace** — mix narration with original audio or replace it
+- **Vision-aware** — `--vision` flag uses AI vision models to understand video frames
+- **Edit integration** — add `--narrate` to any `cutai edit` command
+
+### Multi-Reel Generator
+- **Scene-aware splitting** — splits long videos into short, non-overlapping reels
+- **Gap filling** — handles videos where scene detection misses large sections
+- **Duration targeting** — specify target reel duration
+- **Non-overlapping** — each reel is a standalone, uploadable MP4
 
 ### Edit Style Transfer
 - **Style extraction** — turn a reference video's editing patterns into portable Edit DNA
@@ -126,6 +147,18 @@ cutai plan video.mp4 -i "remove boring parts and add subtitles"
 
 # Quick low-res preview
 cutai preview video.mp4 -i "remove boring parts"
+
+# Add AI voiceover narration
+cutai narrate video.mp4 --tone excited --language English
+
+# Edit + narrate in one command
+cutai edit video.mp4 -i "remove silence, add subtitles" --narrate --narrate-tone documentary
+
+# Vision-aware narration (uses AI to understand video frames)
+cutai narrate video.mp4 --tone documentary --vision
+
+# Split into multiple reels
+cutai reels video.mp4 -n 4 -d 60
 ```
 
 ---
@@ -179,6 +212,8 @@ See [`desktop/README.md`](./desktop/README.md) for the desktop-specific guide, [
 | `cutai analyze` | Analyze video (scenes, transcript, quality) |
 | `cutai plan` | Generate an edit plan without rendering |
 | `cutai preview` | Generate a quick low-resolution preview |
+| `cutai narrate` | 🎙️ Generate AI voiceover narration |
+| `cutai reels` | 🎬 Split video into multiple short reels |
 | `cutai chat` | Interactive chat-based editing session |
 | `cutai highlights` | Auto-generate a highlight reel |
 | `cutai engagement` | Show per-scene engagement scores |
@@ -297,6 +332,8 @@ Common environment variables:
 | Variable | Description |
 |----------|-------------|
 | `OPENAI_API_KEY` | Enables richer LLM-based planning |
+| `OLLAMA_MODEL` | Ollama model for LLM planning and narration script generation |
+| `OLLAMA_VISION_MODEL` | Vision model for scene analysis (default: mistral-large-3:675b-cloud) |
 | `CUTAI_WHISPER_MODEL` | Default Whisper model size |
 | `CUTAI_LLM` | Default LLM model |
 | `CUTAI_OUTPUT_DIR` | Default output directory |
@@ -319,8 +356,10 @@ For more open-ended planning, configure an API-backed model or a local LLM setup
 
 ```text
 Analyzer → Planner → Editor / Renderer
-          ↘ Style engine ↗
-          ↘ Highlight / engagement ↗
+           ↘ Style engine ↗
+           ↘ Highlight / engagement ↗
+           ↘ Narrator (TTS + Vision) ↗
+           ↘ Reels generator ↗
 ```
 
 Key modules:
@@ -328,6 +367,7 @@ Key modules:
 - `cutai/analyzer/` — scene detection, transcription, quality signals, engagement
 - `cutai/planner/` — rule-based + LLM edit planning
 - `cutai/editor/` — cutter, subtitles, color, BGM, speed, transitions, render orchestration
+- `cutai/narrator/` — AI voiceover narration (script generation, Edge TTS, vision analysis, audio mixing)
 - `cutai/style/` — style extraction / application / learning / YAML IO
 - `cutai/server.py` — backend API used by the desktop app
 - `desktop/` — Tauri + React desktop shell
