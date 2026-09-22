@@ -37,3 +37,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local source media and generated comparison bundles
+out/

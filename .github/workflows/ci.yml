@@ -1,8 +1,8 @@
-name: CI
+name: editstyle CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, "revival/**"]
   pull_request:
     branches: [master, main]
 
@@ -11,46 +11,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-
+      - name: Install
+        run: pip install -e ".[mcp,dev]"
       - name: Lint
-        run: ruff check cutai/
-
-      - name: Type check
-        run: mypy cutai/ --ignore-missing-imports
-
-      - name: Test
-        run: pytest tests/ -v
-
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Build
-        run: pip install build && python -m build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+        run: ruff check editstyle/ tests/test_style_bridge.py
+      - name: Test style API and real stdio MCP
+        run: python -m unittest discover -s tests -p test_style_bridge.py -v
+      - name: Build installable package
+        run: python -m build
+      - name: Test wheel outside the checkout
+        run: |
+          python -m venv /tmp/editstyle-wheel
+          /tmp/editstyle-wheel/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/editstyle-wheel/bin/editstyle list

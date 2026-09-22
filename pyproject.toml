@@ -3,61 +3,31 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cutai"
-version = "0.2.0"
-description = "AI video editor that takes natural language instructions and edits videos locally."
+name = "editstyle"
+version = "0.3.0a1"
+description = "Portable video editing styles for AI skills, MCP, and existing editors."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [
-    { name = "Minseo", email = "minseo@example.com" },
-]
-keywords = ["video", "editor", "ai", "ffmpeg", "whisper"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Multimedia :: Video",
-    "Topic :: Multimedia :: Video :: Non-Linear Editor",
-]
-dependencies = [
-    "faster-whisper>=1.0",
-    "scenedetect>=0.6",
-    "opencv-python-headless>=4.8",
-    "typer>=0.9",
-    "rich>=13.0",
-    "openai>=1.0",
-    "pydantic>=2.0",
-    "pyyaml>=6.0",
-    "fastapi>=0.100",
-    "uvicorn>=0.20",
-    "python-multipart>=0.0.6",
-]
+dependencies = []
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "ruff>=0.1",
-    "mypy>=1.0",
-    "pytest-cov>=4.0",
-]
+mcp = ["mcp>=1.28,<2"]
+dev = ["ruff>=0.1", "build>=1"]
 
 [project.scripts]
-cutai = "cutai.cli:app_entry"
+editstyle = "editstyle.catalog:main"
+editstyle-mcp = "editstyle.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/mindsurf0176-ui/cutai"
-Repository = "https://github.com/mindsurf0176-ui/cutai"
-Documentation = "https://github.com/mindsurf0176-ui/cutai#readme"
-Issues = "https://github.com/mindsurf0176-ui/cutai/issues"
+Repository = "https://github.com/mindsurf0176/editstyle"
+Issues = "https://github.com/mindsurf0176/editstyle/issues"
 
 [tool.setuptools.packages.find]
-include = ["cutai*"]
+include = ["editstyle*"]
+
+[tool.setuptools.package-data]
+editstyle = ["presets/*.md"]
 
 [tool.ruff]
 target-version = "py310"
@@ -66,9 +36,3 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-ignore_missing_imports = true

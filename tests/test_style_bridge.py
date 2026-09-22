@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from cutai.style_bridge import get_style, list_styles, read_style
+from editstyle.catalog import get_style, list_styles, read_style
 
 try:
     from mcp import ClientSession, StdioServerParameters
@@ -20,7 +20,7 @@ class StyleBridgeTests(unittest.TestCase):
         self.assertEqual(len(styles), 7)
         for item in styles:
             result = get_style(item["id"])
-            original = Path("awesome-editstyles/presets", item["id"] + ".md")
+            original = Path("editstyle/presets", item["id"] + ".md")
             self.assertEqual(result["markdown"], original.read_text(encoding="utf-8"))
             expected = 5 if item["id"] in {"cinematic", "vlog-casual"} else 7
             self.assertEqual(len(result["sections"]), expected)
@@ -32,6 +32,10 @@ class StyleBridgeTests(unittest.TestCase):
         self.assertIn("Rhythm", result["unspecified_sections"])
         self.assertEqual(len(result["sections"]), 1)
         self.assertNotIn("dna", result)
+
+    def test_new_and_legacy_markers_are_compatible(self):
+        for marker in ("EDITSTYLE v1", "CutAI EDITSTYLE v1"):
+            self.assertEqual(read_style(f"# Personal\n> {marker}\n")["name"], "Personal")
 
     def test_unknown_and_duplicate_sections_survive(self):
         text = "# 취향\n> CutAI EDITSTYLE v1\n## Evidence\n- 00:03 pause\n## Rules\n- A\n## Rules\n- B\n"
@@ -62,32 +66,34 @@ class StyleMCPTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_stdio_session(self):
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "cutai.style_mcp"],
+            args=["-m", "editstyle.mcp_server"],
             cwd=str(Path(__file__).resolve().parent.parent),
         )
-        async with stdio_client(params) as (reader, writer):
-            async with ClientSession(reader, writer) as client:
-                await client.initialize()
-                tools = (await client.list_tools()).tools
-                self.assertEqual({t.name for t in tools}, {
-                    "cutai_list_styles", "cutai_get_style", "cutai_read_style",
-                })
-                self.assertTrue(all(t.annotations.readOnlyHint for t in tools))
-                catalog = await client.call_tool("cutai_list_styles", {})
-                self.assertFalse(catalog.isError)
-                style = await client.call_tool("cutai_get_style", {"style_id": "cinematic"})
-                self.assertFalse(style.isError)
-                data = json.loads(style.content[0].text)
-                self.assertEqual(data["id"], "cinematic")
-                custom = await client.call_tool("cutai_read_style", {
-                    "markdown": "# Custom\n> CutAI EDITSTYLE v1\n## Evidence\n- user brief",
-                })
-                self.assertFalse(custom.isError)
-                self.assertIn("Rhythm", json.loads(custom.content[0].text)["unspecified_sections"])
-                invalid = await client.call_tool("cutai_get_style", {"style_id": "../README"})
-                self.assertTrue(invalid.isError)
-                invalid = await client.call_tool("cutai_read_style", {"markdown": "invalid"})
-                self.assertTrue(invalid.isError)
+        async with (
+            stdio_client(params) as (reader, writer),
+            ClientSession(reader, writer) as client,
+        ):
+            await client.initialize()
+            tools = (await client.list_tools()).tools
+            self.assertEqual({t.name for t in tools}, {
+                "editstyle_list_styles", "editstyle_get_style", "editstyle_read_style",
+            })
+            self.assertTrue(all(t.annotations.readOnlyHint for t in tools))
+            catalog = await client.call_tool("editstyle_list_styles", {})
+            self.assertFalse(catalog.isError)
+            style = await client.call_tool("editstyle_get_style", {"style_id": "cinematic"})
+            self.assertFalse(style.isError)
+            data = json.loads(style.content[0].text)
+            self.assertEqual(data["id"], "cinematic")
+            custom = await client.call_tool("editstyle_read_style", {
+                "markdown": "# Custom\n> CutAI EDITSTYLE v1\n## Evidence\n- user brief",
+            })
+            self.assertFalse(custom.isError)
+            self.assertIn("Rhythm", json.loads(custom.content[0].text)["unspecified_sections"])
+            invalid = await client.call_tool("editstyle_get_style", {"style_id": "../README"})
+            self.assertTrue(invalid.isError)
+            invalid = await client.call_tool("editstyle_read_style", {"markdown": "invalid"})
+            self.assertTrue(invalid.isError)
 
 
 if __name__ == "__main__":

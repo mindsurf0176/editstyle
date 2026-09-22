@@ -1,4 +1,4 @@
-# CutAI: reusable editing styles
+# editstyle: reusable editing styles (formerly CutAI)
 
 2026-09-22 · working prototype
 
@@ -42,12 +42,12 @@ CutAI의 새 방향은 **기존 편집 도구에서 재사용하는 편집 스�
 이 새 경로는 Whisper, OpenCV, FFmpeg나 기존 편집기 설치를 요구하지 않는다.
 
 ```bash
-python3 -m cutai.style_bridge list
-python3 -m cutai.style_bridge get cinematic
-python3 -m cutai.style_bridge read /absolute/path/EDITSTYLE.md
+python3 -m editstyle.catalog list
+python3 -m editstyle.catalog get cinematic
+python3 -m editstyle.catalog read /absolute/path/EDITSTYLE.md
 ```
 
-스킬 배포 단위는 `skills/cutai-style/` 전체 폴더다. 스킬을 지원하는 호스트의
+스킬 배포 단위는 `skills/editstyle/` 전체 폴더다. 스킬을 지원하는 호스트의
 skills 디렉터리에 복사해서 사용한다. MCP 없이 사용자 브리프나 직접 제공한
 스타일 문서만으로도 동작한다. 이 저장소를 받는 것만으로 자동 설치되지는 않는다.
 
@@ -55,7 +55,7 @@ MCP는 공식 Python SDK v1 API를 사용하며 호환성을 위해 `<2`로 제�
 공식 근거: https://py.sdk.modelcontextprotocol.io/v1/
 
 ```bash
-uv run --no-project --with 'mcp>=1.28,<2' python -m cutai.style_mcp
+uv run --no-project --with 'mcp>=1.28,<2' python -m editstyle.mcp_server
 ```
 
 stdio MCP 호스트의 설정 예시(경로는 실제 체크아웃으로 변경):
@@ -63,18 +63,18 @@ stdio MCP 호스트의 설정 예시(경로는 실제 체크아웃으로 변경)
 ```json
 {
   "mcpServers": {
-    "cutai-styles": {
+    "editstyle": {
       "command": "uv",
       "args": [
-        "run", "--directory", "/absolute/path/to/cutai", "--no-project",
-        "--with", "mcp>=1.28,<2", "python", "-m", "cutai.style_mcp"
+        "run", "--directory", "/absolute/path/to/editstyle", "--no-project",
+        "--with", "mcp>=1.28,<2", "python", "-m", "editstyle.mcp_server"
       ]
     }
   }
 }
 ```
 
-도구는 `cutai_list_styles`, `cutai_get_style`, `cutai_read_style` 세 개다.
+도구는 `editstyle_list_styles`, `editstyle_get_style`, `editstyle_read_style` 세 개다.
 새 MCP에는 편집/렌더/쉘 실행 도구가 없다. `read_style`은 파일 경로 대신
 호스트가 제공한 Markdown 텍스트를 받는다. 저장은 호스트의 파일 기능으로 한다.
 현재 배포는 저장소 체크아웃 기준이며 PyPI wheel 배포는 준비하지 않았다.

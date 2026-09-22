@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutai"
+version = "0.2.0"
+description = "AI video editor that takes natural language instructions and edits videos locally."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Minseo", email = "minseo@example.com" },
+]
+keywords = ["video", "editor", "ai", "ffmpeg", "whisper"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Non-Linear Editor",
+]
+dependencies = [
+    "faster-whisper>=1.0",
+    "scenedetect>=0.6",
+    "opencv-python-headless>=4.8",
+    "typer>=0.9",
+    "rich>=13.0",
+    "openai>=1.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+cutai = "cutai.cli:app_entry"
+
+[project.urls]
+Homepage = "https://github.com/mindsurf0176-ui/cutai"
+Repository = "https://github.com/mindsurf0176-ui/cutai"
+Documentation = "https://github.com/mindsurf0176-ui/cutai#readme"
+Issues = "https://github.com/mindsurf0176-ui/cutai/issues"
+
+[tool.setuptools.packages.find]
+include = ["cutai*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

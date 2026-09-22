@@ -1,19 +1,20 @@
 ---
-name: cutai-style
+name: editstyle
 description: Extract or adapt reusable video editing guidance from reference observations, an EDITSTYLE.md file, or a style brief, then translate it into a plan for the user's existing editing tool.
 ---
 
-# CutAI Style
+# editstyle
 
-Make the user's editing taste reusable across videos. The deliverable is an
+Make the user's editing taste reusable across videos. editstyle is the product name;
+CutAI is its legacy editor implementation. The deliverable is an
 `EDITSTYLE.md` profile and, when target footage is available, a grounded editing
 brief for their existing tool.
 
 ## Inputs and workflow
 
 Use the user's reference video, existing style document, or described preferences.
-If CutAI MCP is available, `cutai_list_styles` and `cutai_get_style` retrieve starter
-presets; `cutai_read_style` preserves a custom document's full text. These tools
+If editstyle MCP is available, `editstyle_list_styles` and `editstyle_get_style` retrieve starter
+presets; `editstyle_read_style` preserves a custom document's full text. These tools
 do not analyze or edit videos. Without MCP, work directly from supplied material.
 
 For a reference video, inspect what the available media tools can actually expose:

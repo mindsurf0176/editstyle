@@ -10,7 +10,7 @@ the legacy parser and present its defaults as observations.
 
 > Source: user brief; no reference measurement
 > Author: user + AI assistant
-> CutAI EDITSTYLE v1
+> EDITSTYLE v1
 
 ## Rhythm
 - Preserve complete answers; trim repetition after the first clear explanation.
