@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 5,
+  "id": "com.editstyle.premiere",
+  "name": "editstyle",
+  "version": "0.3.0",
+  "main": "index.html",
+  "host": { "app": "premierepro", "minVersion": "25.6.0" },
+  "requiredPermissions": {
+    "network": { "domains": ["http://127.0.0.1:18470"] }
+  },
+  "entrypoints": [{
+    "id": "editstyle", "type": "panel", "label": { "default": "editstyle" },
+    "minimumSize": { "width": 320, "height": 420 },
+    "preferredDockedSize": { "width": 380, "height": 700 },
+    "preferredFloatingSize": { "width": 420, "height": 760 }
+  }]
+}

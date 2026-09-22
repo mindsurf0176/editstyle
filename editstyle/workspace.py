@@ -9,15 +9,17 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
+KINDS = {"styles", "media", "plans", "exports", "host_snapshots", "host_exports"}
+
 
 class Workspace:
     def __init__(self, root: Path):
         self.root = root.resolve()
-        for directory in ("styles", "media", "plans", "exports"):
+        for directory in KINDS:
             (self.root / directory).mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def path(self, kind: str, identifier: str) -> Path:
-        if kind not in {"styles", "media", "plans", "exports"} or not re.fullmatch(r"[a-f0-9]{32}", identifier):
+        if kind not in KINDS or not re.fullmatch(r"[a-f0-9]{32}", identifier):
             raise ValueError("올바르지 않은 작업 ID입니다.")
         return self.root / kind / identifier
 

@@ -1,5 +1,25 @@
 # editstyle companion — implementation target
 
+## Native panel extension — 2026-09-22
+
+User requested an in-editor plugin. Direct build against this existing design system;
+retain neutral dense canvas, blue action role, explicit source-range review and native
+text controls. Premiere UXP's official starter panel is the dominant **layout** reference
+(narrow vertically scrolling tool panel); existing editstyle owns color/type tokens.
+Resolve UIManager uses host-native widgets, not an attempted web visual imitation.
+No generated imagery: the editor already owns footage preview.
+
+| Decision | Source / role | Adaptation |
+|---|---|---|
+| Single-column 320–420px panel | Adobe official UXP panel tutorial | Setup, active sequence, review, apply in reading order |
+| Existing neutral/blue tokens | Existing editstyle UI | Blue only for generate/apply; no new brand palette |
+| Separate review and write action | User's editing-style workflow + craft guide | Consent lists unmapped effects; original preserved |
+| Masked, cleared credential fields | BYOK constraint + craft forms | No saved API key; pairing separate from model auth |
+
+Reference: https://developer.adobe.com/premiere-pro/uxp/plugins/ .
+Refero MCP unavailable; the bundled craft/visual QA guides and these existing surfaces
+are the reference lock. Browser UI QA is not proof of UXP or UIManager rendering.
+
 2026-09-22. Direct implementation requested by the user.
 
 ## Reference lock

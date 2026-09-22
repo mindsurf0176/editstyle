@@ -1,0 +1,30 @@
+:root { color-scheme: dark; }
+body { margin: 0; padding: 16px; background: #191c1f; color: #f4f5f6; font-family: system-ui, sans-serif; font-size: 13px; }
+header { margin-bottom: 16px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 14px; margin: 0 0 12px; }
+header span, .hint { color: #aeb8c2; font-size: 12px; line-height: 1.6; }
+section { border-top: 1px solid #373d43; padding-top: 16px; margin-top: 16px; }
+p { line-height: 1.5; margin: 8px 0; }
+label { display: block; margin: 12px 0 6px; }
+input, textarea, select { width: 100%; min-width: 0; padding: 8px; background: #111315; border: 1px solid #59636c; border-radius: 6px; color: #f4f5f6; font-size: 13px; box-sizing: border-box; }
+textarea { resize: vertical; }
+button { padding: 8px 12px; min-height: 34px; border: 1px solid #59636c; border-radius: 6px; background: #22262a; color: #f4f5f6; margin: 8px 4px 0 0; font-size: 13px; cursor: pointer; }
+button.primary { background: #92c8ff; color: #111315; border-color: #92c8ff; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus, input:focus, textarea:focus, select:focus { outline: 2px solid #92c8ff; outline-offset: 2px; }
+/* UXP's selector subset varies by host; keep the explicit focus fallback above. */
+#status { padding: 10px; background: #111315; border-left: 3px solid #92c8ff; }
+#status.error { border-left-color: #ff9b8a; }
+.command, #duration { font-family: monospace; font-size: 12px; color: #aeb8c2; }
+.command { overflow-wrap: anywhere; }
+.cut { border-bottom: 1px solid #373d43; padding: 12px 0; }
+.cut-name { font-weight: 600; overflow-wrap: anywhere; }
+.range { display: flex; }
+.range label { width: 50%; margin-right: 8px; }
+.range label:last-child { margin-right: 0; }
+.cut input { font-family: monospace; }
+.cut-reason { color: #aeb8c2; font-size: 12px; }
+.consent { line-height: 1.6; }
+input[type="checkbox"] { width: 16px; height: 16px; margin-right: 6px; }
+#apply { width: 100%; }

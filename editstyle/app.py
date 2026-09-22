@@ -45,12 +45,14 @@ class ManualPlan(BaseModel):
     proposal: editing.Proposal
 
 
-def create_app(data_dir: Path | None = None) -> FastAPI:
+def create_app(data_dir: Path | None = None, *, plugin_token: str | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     workspace = Workspace(data_dir or Path.home() / ".editstyle")
     token = secrets.token_urlsafe(32)
     app.state.workspace = workspace
     app.state.connection = None
+    app.state.connection_epoch = 0
+    app.state.connection_lock = threading.Lock()
     app.state.complete = complete
     app.state.export_lock = threading.Lock()
 
@@ -65,7 +67,12 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         if host not in {"localhost", "127.0.0.1", "::1", "testserver"}:
             return JSONResponse({"detail": "로컬 주소로 접속하세요."}, status_code=403)
         origin = request.headers.get("origin")
-        if origin and (urlsplit(origin).netloc != request.headers.get("host") or
+        bridge = request.url.path.startswith("/bridge/")
+        if bridge and (not plugin_token or not secrets.compare_digest(
+                request.headers.get("x-editstyle-plugin", ""), plugin_token)):
+            return JSONResponse({"detail": "엔진을 --plugins로 실행하고 연결 코드를 입력하세요."}, status_code=403)
+        native_origin = bridge and origin in {None, "null", "uxp://com.editstyle.premiere"}
+        if not native_origin and origin and (urlsplit(origin).netloc != request.headers.get("host") or
                        urlsplit(origin).scheme != request.url.scheme):
             return JSONResponse({"detail": "다른 사이트의 요청을 허용하지 않습니다."}, status_code=403)
         if request.headers.get("sec-fetch-site") == "cross-site":
@@ -118,14 +125,22 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.post("/api/model/connect")
     def connect(config: ModelConnection):
+        with app.state.connection_lock:
+            app.state.connection_epoch += 1
+            epoch = app.state.connection_epoch
         result = app.state.complete(config, "You are testing a connection. Reply briefly.", "Reply: editstyle ready")
-        app.state.connection = config
+        with app.state.connection_lock:
+            if epoch != app.state.connection_epoch:
+                raise ValueError("모델 연결 요청이 취소되거나 다른 설정으로 바뀌었습니다.")
+            app.state.connection = config
         return {"connected": True, "model": config.model, "base_url": config.base_url,
                 "usage": result["usage"]}
 
     @app.post("/api/model/disconnect")
     def disconnect():
-        app.state.connection = None
+        with app.state.connection_lock:
+            app.state.connection_epoch += 1
+            app.state.connection = None
         return {"connected": False}
 
     @app.get("/api/library")
@@ -278,6 +293,9 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             raise HTTPException(404)
         return FileResponse(path, media_type="video/mp4")
 
+    if plugin_token:
+        from editstyle.host_bridge import router
+        app.include_router(router(app, workspace, style, library, connect, disconnect))
     return app
 
 
@@ -288,10 +306,14 @@ def main():
     parser.add_argument("--port", type=int, default=18470)
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--plugins", action="store_true", help="enable paired native editor panels")
     args = parser.parse_args()
+    plugin_token = secrets.token_urlsafe(32) if args.plugins else None
+    if plugin_token:
+        print(f"editstyle 플러그인 연결 코드 (재시작 시 변경): {plugin_token}", flush=True)
     if not args.no_browser:
         threading.Timer(1, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
-    uvicorn.run(create_app(args.data_dir), host="127.0.0.1", port=args.port, access_log=False)
+    uvicorn.run(create_app(args.data_dir, plugin_token=plugin_token), host="127.0.0.1", port=args.port, access_log=False)
 
 
 if __name__ == "__main__":

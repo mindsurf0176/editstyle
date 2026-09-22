@@ -22,11 +22,20 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
           pip install -e ".[app,mcp,dev]"
       - name: Lint
-        run: ruff check editstyle/ tests/test_style_bridge.py tests/test_companion.py
+        run: ruff check editstyle/ plugins/resolve tests/test_style_bridge.py tests/test_companion.py tests/test_host_bridge.py scripts/build-plugins.py
       - name: Test style API and real stdio MCP
         run: python -m unittest discover -s tests -p test_style_bridge.py -v
       - name: Test companion and real media interchange
         run: python -m unittest discover -s tests -p test_companion.py -v
+      - name: Test native host bridge and source-media interchange
+        run: python -m unittest tests.test_host_bridge -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test Premiere SDK contracts and build development plugin bundles
+        run: |
+          node --test tests/test_premiere.cjs
+          python scripts/build-plugins.py
       - name: Build installable package
         run: python -m build
       - name: Test wheel outside the checkout

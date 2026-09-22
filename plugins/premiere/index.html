@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="UTF-8"><link rel="stylesheet" href="panel.css"></head>
+<body>
+  <header><h1>editstyle</h1><span>Premiere Pro · 개발 미리보기</span></header>
+  <p id="status" role="status" aria-live="polite">로컬 엔진을 연결하면 현재 시퀀스를 읽을 수 있습니다.</p>
+  <button id="settings-toggle">연결 설정</button>
+  <section id="settings">
+    <h2>로컬 엔진</h2>
+    <p class="hint">터미널에서 실행한 엔진의 연결 코드를 입력하세요.</p>
+    <p class="command">editstyle-app --plugins --no-browser</p>
+    <label for="pair-code">연결 코드</label><input id="pair-code" type="password" autocomplete="off">
+    <button id="pair">엔진 연결</button>
+    <h2>내 모델</h2>
+    <label for="base-url">OpenAI 호환 API 주소</label><input id="base-url" value="http://localhost:11434/v1" spellcheck="false">
+    <label for="model">모델 이름</label><input id="model" placeholder="설치하거나 구독한 모델 이름" spellcheck="false">
+    <label for="api-key">API 키 · 로컬 모델은 선택</label><input id="api-key" type="password" autocomplete="off">
+    <p class="hint">키는 메모리에만 보관합니다. 연결 테스트는 모델 요청 1회를 사용합니다.</p>
+    <button id="connect-model">모델 연결 테스트</button><button id="disconnect-model">모델 연결 해제</button>
+  </section>
+  <section>
+    <h2>현재 시퀀스</h2><p id="sequence">아직 읽지 않았습니다.</p>
+    <button id="capture">타임라인 읽기</button>
+    <label for="style">편집 스타일</label><select id="style"><option value="">엔진을 먼저 연결하세요</option></select>
+    <label for="instruction">이번 편집에서 바꿀 점</label><textarea id="instruction" rows="3" placeholder="예: 각 컷을 짧게 줄이되 마지막 컷은 길게 남겨줘"></textarea>
+    <p class="hint">모델에는 클립 이름·길이·스타일·요청만 보냅니다. 영상·오디오·파일 경로는 보내지 않습니다.</p>
+    <button id="generate" class="primary">AI 컷 제안</button><button id="manual">직접 컷 작성</button>
+  </section>
+  <section>
+    <h2>컷 검토 <span id="duration"></span></h2>
+    <p id="summary">제안을 받거나 직접 작성하세요.</p>
+    <p class="hint">시작·끝은 현재 클립 안의 프레임 번호입니다. 시작 포함, 끝 제외.</p>
+    <div id="cuts"></div><p id="notes" class="hint"></p>
+    <label class="consent"><input id="acknowledge" type="checkbox"> 새 러프컷에 컷·원본 오디오만 옮깁니다. 색보정·효과·자막·오디오 믹스는 옮기지 않습니다.</label>
+    <button id="apply" class="primary" disabled>새 시퀀스로 적용</button>
+    <p class="hint">원본 시퀀스는 변경하지 않습니다. 재생하며 컷 경계와 오디오를 확인하세요.</p>
+  </section>
+  <script src="index.js"></script>
+</body></html>
