@@ -2,6 +2,19 @@
 
 # CutAI
 
+> **2026-09-22 reboot: portable editing styles for AI skills and MCP.**
+>
+> CutAI is being narrowed to reusable `EDITSTYLE.md` profiles for the editing
+> tools you already use. The first prototype includes a standalone skill and
+> a lightweight, style-only MCP server: list presets, retrieve complete style
+> documents, and read custom styles without inventing missing settings.
+>
+> Start with [the style reboot guide](docs/STYLE_REBOOT.md) or
+> [the CutAI Style skill](skills/cutai-style/SKILL.md).
+> Reference extraction quality and external editor execution are not yet verified.
+>
+> **The editor documentation below describes the legacy v0.2 implementation.**
+
 > AI video editor with natural language instructions. Local-first, open-source.
 
 > "Film it. Describe the edit. Done."
