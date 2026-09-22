@@ -1,7 +1,10 @@
 prune tests
 include tests/test_style_bridge.py
+include tests/test_companion.py
 recursive-include skills/editstyle *.md
 include docs/STYLE_REBOOT.md
 include docs/PRODUCT_DIRECTION.md
+include docs/COMPANION.md
+include DESIGN.md
 include docs/LEGACY_CUTAI.md
 include docs/legacy-pyproject.toml

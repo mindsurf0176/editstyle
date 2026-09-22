@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>editstyle · 편집 스타일 작업실</title>
+  <link rel="stylesheet" href="/app.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a href="#workspace" class="brand" aria-label="editstyle 작업실"><span class="brand-mark" aria-hidden="true">e/</span>editstyle<span class="app-label">작업실</span></a>
+    <button id="model-open" class="connection"><span class="status-dot" id="model-dot"></span><span id="model-label">모델 연결</span><span aria-hidden="true">↗</span></button>
+  </header>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <div class="app-layout" id="workspace">
+    <aside class="library" aria-label="스타일 라이브러리">
+      <div class="rail-title"><h1>편집 스타일</h1><button id="new-style" class="icon-button" aria-label="새 스타일 작성">＋</button></div>
+      <p class="muted rail-intro">다음 영상에도 이어 쓸 취향.</p>
+      <nav id="style-list" aria-label="저장된 스타일"></nav>
+      <button id="import-style" class="quiet wide">EDITSTYLE.md 가져오기</button>
+      <input id="style-file" type="file" accept=".md,text/markdown,text/plain" hidden>
+      <div class="rail-footer"><span>내 컴퓨터에 저장</span><small>스타일과 작업은 앱을 다시 열어도 남아요.</small></div>
+    </aside>
+    <main>
+      <div class="workspace-heading">
+        <div><p class="eyebrow">현재 작업</p><h2 id="source-name">스타일을 적용할 영상을 가져오세요</h2></div>
+        <button id="upload-button" class="secondary">영상 가져오기 <span aria-hidden="true">＋</span></button>
+        <input id="video-file" type="file" accept="video/*,.mov,.mkv" hidden>
+      </div>
+      <div class="source-switch" hidden id="recent-wrap"><label for="recent-media">최근 영상</label><select id="recent-media"></select></div>
+      <div class="workbench">
+        <section class="source-pane" aria-label="원본 영상">
+          <div class="viewer">
+            <div id="video-empty" class="empty-view">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="11" width="38" height="26" rx="4"/><path d="m21 19 9 5-9 5Z"/></svg>
+              <h3>원본에서 시작하세요</h3><p>MP4, MOV 등 · 10분 / 512MB 이하</p>
+              <button id="empty-upload" class="primary">영상 선택</button>
+            </div>
+            <video id="source-video" controls playsinline preload="metadata" hidden aria-label="원본 작업용 영상"></video>
+          </div>
+          <div class="media-info"><span id="media-facts">영상은 이 컴퓨터에서 처리합니다.</span><span id="media-time" class="mono"></span></div>
+          <div id="frames" class="filmstrip" aria-label="원본 샘플 프레임"></div>
+          <p class="help" id="copy-note" hidden>원본을 보존하고 30fps 작업용 사본을 만듭니다. 최대 1280px · 편집 제안의 시간 기준</p>
+        </section>
+        <section class="direction-pane" aria-labelledby="style-name">
+          <div class="section-heading"><p class="eyebrow">적용할 스타일</p><button id="edit-style" class="text-button">문서 편집</button></div>
+          <h2 id="style-name">스타일 선택</h2>
+          <p id="style-origin" class="muted"></p>
+          <pre id="style-preview" class="style-preview"></pre>
+          <label for="instruction">이번 영상에서 바꿀 점</label>
+          <textarea id="instruction" rows="3" placeholder="설명은 충분히 남기고, 자막 강조는 줄여줘."></textarea>
+          <label class="check"><input id="send-frames" type="checkbox"><span>샘플 프레임 8장도 모델에 전달</span></label>
+          <p class="help">요청 시 스타일·컷 후보·입력한 지시를 연결한 모델로 보냅니다. 오디오와 영상 전체는 보내지 않아요. 모델 사용료는 공급자 기준입니다.</p>
+          <button id="generate-plan" class="primary wide">편집 제안 만들기 <span aria-hidden="true">↗</span></button>
+          <div class="split-actions"><button id="manual-plan" class="quiet">컷 직접 작성</button><button id="extract-style" class="quiet">이 영상의 스타일 읽기</button></div>
+        </section>
+      </div>
+      <section class="proposal" aria-labelledby="proposal-title">
+        <div class="section-heading"><div><p class="eyebrow">검토하고 전달하기</p><h2 id="proposal-title">편집 제안</h2></div><span id="plan-length" class="mono muted"></span></div>
+        <div id="plan-empty" class="empty-plan">스타일과 영상을 고르면 제안을 만들 수 있어요.<br><span class="muted">모델 없이 시작하려면 ‘컷 직접 작성’을 선택하세요.</span></div>
+        <div id="plan-content" hidden>
+          <p id="plan-summary"></p>
+          <p class="help">시작·끝은 원본 시간(초)입니다. 자막은 설명용 문구이며, 음성을 전사한 내용이 아닙니다.</p>
+          <div class="table-scroll"><table><thead><tr><th>컷</th><th>시작</th><th>끝</th><th>선택 이유</th><th>자막</th><th><span class="sr-only">삭제</span></th></tr></thead><tbody id="clip-rows"></tbody></table></div>
+          <div class="proposal-actions"><button id="add-cut" class="quiet">＋ 컷 추가</button><button id="save-plan" class="secondary">변경사항 저장</button><span id="dirty-indicator" class="muted"></span></div>
+          <details id="plan-notes"><summary>검토할 점 · 적용 범위</summary><ul></ul></details>
+          <div class="export-bar"><div><strong>편집 도구에서 이어서 작업하기</strong><p>Premiere · Resolve: XML / CapCut: 번호순 클립 + SRT<br>색보정·전환 효과·자막 서체는 편집기에서 설정하세요.</p></div><button id="export-plan" class="primary">가져오기 묶음 만들기</button></div>
+          <div id="export-result" hidden><div class="export-ready"><span>검토한 컷으로 묶음을 만들었어요.</span><button id="download-bundle" class="secondary">ZIP 다운로드 ↓</button></div><video id="result-video" controls playsinline preload="metadata" aria-label="편집 결과 미리보기"></video><p class="help">컷·오디오 검토용 미리보기입니다. 자막은 ZIP 안의 SRT로 별도 전달됩니다. 실제 편집기에서 싱크를 확인하세요.</p></div>
+        </div>
+      </section>
+      <details class="history"><summary>저장한 편집 제안</summary><div id="history-list"></div></details>
+    </main>
+  </div>
+  <dialog id="model-dialog" aria-labelledby="model-title">
+    <form id="model-form">
+      <div class="dialog-heading"><h2 id="model-title">사용할 모델 연결</h2><button type="button" class="icon-button close-dialog" aria-label="닫기">×</button></div>
+      <p class="muted">OpenAI 호환 API 또는 로컬 모델 서버를 연결하세요.</p>
+      <label for="base-url">API 서버 주소</label><input id="base-url" type="url" required value="http://127.0.0.1:11434/v1" spellcheck="false" autocomplete="off">
+      <p class="help">Chat Completions를 지원하는 주소 · 예: http://localhost:1234/v1</p>
+      <label for="model-name">모델 이름</label><input id="model-name" required placeholder="서버에서 사용하는 모델 ID" autocomplete="off" spellcheck="false">
+      <label for="api-key">API 키 <span class="muted">로컬 서버는 생략 가능</span></label><input id="api-key" type="password" autocomplete="off" spellcheck="false">
+      <label class="check"><input id="vision-model" type="checkbox" checked><span>이미지를 입력받을 수 있는 모델</span></label>
+      <p class="help">키는 앱 실행 중 메모리에만 보관합니다. 연결 확인에는 짧은 테스트 요청 1회가 발생합니다.</p>
+      <p id="model-error" role="alert" class="error" hidden></p>
+      <div class="dialog-actions"><button id="disconnect-model" type="button" class="quiet">연결 해제</button><button type="submit" class="primary">연결 확인</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-dialog" class="wide-dialog" aria-labelledby="style-dialog-title">
+    <form id="style-form">
+      <div class="dialog-heading"><h2 id="style-dialog-title">스타일 문서</h2><button type="button" class="icon-button close-dialog" aria-label="닫기">×</button></div>
+      <p class="muted">컷 리듬·자막·연출 규칙을 편집하세요. 저장하면 새 스타일로 남습니다.</p>
+      <label for="style-document" class="sr-only">EDITSTYLE.md 내용</label><textarea id="style-document" rows="19" required spellcheck="false"></textarea>
+      <p id="style-error" role="alert" class="error" hidden></p>
+      <div class="dialog-actions"><button id="download-style" type="button" class="quiet">MD 다운로드</button><button type="submit" class="primary">내 스타일로 저장</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

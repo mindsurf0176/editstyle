@@ -1,5 +1,8 @@
 # editstyle 보조앱 방향 — 검토안
 
+> 2026-09-22 후속: 사용자가 바로 구현을 승인했다. 로컬 보조앱 첫 버전은
+> [COMPANION.md](COMPANION.md)에 기록한다. 아래 미구현 표기는 구현 전의 역사 기록이다.
+
 2026-09-22. 사용자가 CutAI를 editstyle로 이름 변경했고, 지원 대상으로
 DaVinci Resolve·Premiere Pro·CapCut을 지정했다. 이어서 “어디든 붙이는 AI 편집
 확장앱, LLM 모델은 사용자가 지정”하는 제품 형태를 제안했다. 앱 UI나 BYOK

@@ -13,11 +13,13 @@ dependencies = []
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.28,<2"]
+app = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "python-multipart>=0.0.20", "opentimelineio>=0.18,<0.19", "otio-fcp-adapter>=1,<2"]
 dev = ["ruff>=0.1", "build>=1"]
 
 [project.scripts]
 editstyle = "editstyle.catalog:main"
 editstyle-mcp = "editstyle.mcp_server:main"
+editstyle-app = "editstyle.app:main"
 
 [project.urls]
 Repository = "https://github.com/mindsurf0176/editstyle"
@@ -27,7 +29,7 @@ Issues = "https://github.com/mindsurf0176/editstyle/issues"
 include = ["editstyle*"]
 
 [tool.setuptools.package-data]
-editstyle = ["presets/*.md"]
+editstyle = ["presets/*.md", "web/*"]
 
 [tool.ruff]
 target-version = "py310"

@@ -10,6 +10,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "annotated-doc"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/8e/38aa427ed5402449e226975b649c5dc73ccadfefeb95e6aecb8f8ea4b6b6/annotated_doc-0.0.5.tar.gz", hash = "sha256:c7e58ce09192557605d8bbd92836d7e1d520ac9580096042c0bfd197efacf1bb", size = 10758, upload-time = "2026-07-28T13:50:58.129Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl", hash = "sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101", size = 5302, upload-time = "2026-07-28T13:50:57.239Z" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -260,6 +269,14 @@ version = "0.3.0a1"
 source = { editable = "." }
 
 [package.optional-dependencies]
+app = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "opentimelineio" },
+    { name = "otio-fcp-adapter" },
+    { name = "python-multipart" },
+    { name = "uvicorn" },
+]
 dev = [
     { name = "build" },
     { name = "ruff" },
@@ -271,10 +288,16 @@ mcp = [
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1" },
+    { name = "fastapi", marker = "extra == 'app'", specifier = ">=0.115,<1" },
+    { name = "httpx", marker = "extra == 'app'", specifier = ">=0.27,<1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.28,<2" },
+    { name = "opentimelineio", marker = "extra == 'app'", specifier = ">=0.18,<0.19" },
+    { name = "otio-fcp-adapter", marker = "extra == 'app'", specifier = ">=1,<2" },
+    { name = "python-multipart", marker = "extra == 'app'", specifier = ">=0.0.20" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
+    { name = "uvicorn", marker = "extra == 'app'", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["mcp", "dev"]
+provides-extras = ["mcp", "app", "dev"]
 
 [[package]]
 name = "exceptiongroup"
@@ -286,6 +309,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl", hash = "sha256:a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598", size = 16740, upload-time = "2025-11-21T23:01:53.443Z" },
+]
+
+[[package]]
+name = "fastapi"
+version = "0.141.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8a/02/91e3416a8fdd715abb903a952a6bec7cdd8d14eed55d415fc8595524c319/fastapi-0.141.1.tar.gz", hash = "sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1", size = 425799, upload-time = "2026-07-29T17:18:05.568Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/03/10388a42375ee7e4ac9b94eb2c5c569c8b5795e377e701c9ac3ad63de890/fastapi-0.141.1-py3-none-any.whl", hash = "sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3", size = 131954, upload-time = "2026-07-29T17:18:04.364Z" },
 ]
 
 [[package]]
@@ -406,6 +445,42 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ba/93/0142dc84a666daf8ad51a34268f34c12fd6fda4f3810c4be2504eecc8212/mcp-1.30.0.tar.gz", hash = "sha256:445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4", size = 680511, upload-time = "2026-09-07T14:34:15.845Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/f4/e58bc33317c92a0203664daaf00bf6f41166cc0149e5d6870a03f7cd004a/mcp-1.30.0-py3-none-any.whl", hash = "sha256:666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0", size = 234581, upload-time = "2026-09-07T14:34:14.266Z" },
+]
+
+[[package]]
+name = "opentimelineio"
+version = "0.18.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/41/73e65b707f3491792d4b34bea75edc2a1cc6ce10848ba199c3de8e3bee58/opentimelineio-0.18.1.tar.gz", hash = "sha256:a4e5086e2accd4ca9853ab48bf531e0c148eff47889363a6da3a03f662fbf5e8", size = 2921656, upload-time = "2025-11-09T16:38:53.364Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/91/e45249a50ec0b751ccb1e5ed73da2348cf1020de7c6015790937c4024c75/opentimelineio-0.18.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:fd8df249657e21142a46ebec534b8a9b2dfd30ce8626fab78ff636626b4e9164", size = 1271597, upload-time = "2025-11-09T16:38:27.917Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/be/2142dd2a4617653803b63b7ea9cfe5f6e32132dbc4e4c3de6927e3995a9b/opentimelineio-0.18.1-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:e5b990fc2379abd77f850beadad3596aea15628c149711c240b2f403f9c2b6e5", size = 776639, upload-time = "2025-11-09T16:38:29.607Z" },
+    { url = "https://files.pythonhosted.org/packages/38/dd/789e0955638d7ccf63158263b83343991dae3d9be4bdf8781cc95e599d51/opentimelineio-0.18.1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:314f016f6821af70512d65393de6c0f96929bb5f0c3dbc74a282a8652dc6fd70", size = 845129, upload-time = "2025-11-09T16:38:30.895Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/e2/64c494d36fc7fb553e51a63d667940a054b3703dbe370c7a0a26d0669be7/opentimelineio-0.18.1-cp310-cp310-win_amd64.whl", hash = "sha256:991496f95f20e067184dea7e0312a80d5875835cdc5a6bd2c85f466344f9498b", size = 602215, upload-time = "2025-11-09T16:38:32.175Z" },
+    { url = "https://files.pythonhosted.org/packages/98/c7/24f5391d90fc997fa99c0b88a32b2ff6093b9e87775885361a4cef7947cf/opentimelineio-0.18.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:caaca67b737e567a5ebeed3a6149324cd7aefa769a979936e6af7b9c51392cff", size = 1278133, upload-time = "2025-11-09T16:38:33.508Z" },
+    { url = "https://files.pythonhosted.org/packages/23/2e/c60ace05002dd3026b44aa8ae206282365172a234759a3cb8cfb12f635d8/opentimelineio-0.18.1-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b90df7b0fa9c67c9619114a1288861410b4d984e071fb63f524730199aa41f40", size = 779468, upload-time = "2025-11-09T16:38:35.107Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/88/d7d1c5762db4338669040f6bb1b36ad93f3999dfbcd27600d5aff1ed2334/opentimelineio-0.18.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e45fe3164c6e559e660b7e1cce6c87ef0b5d634743114823c6e1fb5f56f8601e", size = 848468, upload-time = "2025-11-09T16:38:36.171Z" },
+    { url = "https://files.pythonhosted.org/packages/96/63/5e763c364a030f250a9be663004f77fc16f79af5110c8a702b15eb1699d5/opentimelineio-0.18.1-cp311-cp311-win_amd64.whl", hash = "sha256:c21df4cbda8f0ffae28c43889585fc40fe3533c82e34b22a32b364491145712f", size = 604151, upload-time = "2025-11-09T16:38:37.132Z" },
+    { url = "https://files.pythonhosted.org/packages/42/f9/1171d246952382214ff2936dc24a1a2b5b439968a7aeda28d472339b50b4/opentimelineio-0.18.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1798102411fdd7fdace2441925f910b6daa71ca67c29cd523702a5a19e4e1ded", size = 1236369, upload-time = "2025-11-09T16:38:38.444Z" },
+    { url = "https://files.pythonhosted.org/packages/67/b3/bfed144b9d65c710e0023b5ec664aa8cf27a43a6a8e544af18c5ccf3c6e1/opentimelineio-0.18.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:8ba406c33afc15de91273a06df8b45ecee2a15fa11005be9e2b307f8f53ead8f", size = 775702, upload-time = "2025-11-09T16:38:39.778Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/a9/5fec93c437a92d4dd36470be54327ef5f1f23c2159f696de2797e2a3f727/opentimelineio-0.18.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8f0924f818b496cf771612d489082bdb83f42b6bd97ed06589dd2e2c086742c9", size = 842762, upload-time = "2025-11-09T16:38:41.244Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/24/d6a390f7f9c00b90b068c6f59456ad4d3fd600358728480983d17f6c6ca5/opentimelineio-0.18.1-cp312-cp312-win_amd64.whl", hash = "sha256:f59a24d0be0b1efd70657214c5ef193ee37f5b88948ad603c31218fd910bdd36", size = 608280, upload-time = "2025-11-09T16:38:42.718Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/61/10ddc4ca5a4d67965a6500ab137ca1fda7a44f6595501597e4b3cdbbdc64/opentimelineio-0.18.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:ae5677b6864bd48879f77d2b5fe141a7674664b9f43c87b3e0b6d3c49b5f62a9", size = 1236643, upload-time = "2025-11-09T16:38:43.816Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/4c/06b6536319f2a5c1a99afaa834f1f7c9d572f48bacaf43d6cf4af9229401/opentimelineio-0.18.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:142235d2e9e57976be360f093a77e226698830d435a8ca63ddf0e73ee84c5e95", size = 775605, upload-time = "2025-11-09T16:38:44.94Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/a8/b1721da936e0405a3e317aacb1759a047db36eacd1efbd933feb3ead743e/opentimelineio-0.18.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8740c18d2778d64d2128c3cb805cf381a71164ec8f7ff6b38477b60471ebe1a1", size = 843470, upload-time = "2025-11-09T16:38:46.322Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/ea/346d55de1348d80b5c37036fa4bc2a9e19e08121742369d51577de0d9562/opentimelineio-0.18.1-cp313-cp313-win_amd64.whl", hash = "sha256:af19134bf9cb2f3dd86b15004e0ca9a22c22d6e58a14465d4e5aeeb8329154ea", size = 608367, upload-time = "2025-11-09T16:38:47.554Z" },
+]
+
+[[package]]
+name = "otio-fcp-adapter"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentimelineio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/31/22/2788d6f095154cce77763e400bd28b4e2b2e6eec8a5d6def0d6e42718e72/otio_fcp_adapter-1.0.0.tar.gz", hash = "sha256:38544c1064cc85e169428c8c3436bd7c36b90bad99a253851db130d9d7298ce6", size = 80061, upload-time = "2023-07-07T19:31:32.952Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/fe/4a5b261c97352dbd649c8a5ef408877fa21192ca470b23f22d333fc0ec76/otio_fcp_adapter-1.0.0-py3-none-any.whl", hash = "sha256:6a425e3020be590e10c9076ac2aada22c1d5d7799abae9f3fbd51f08e07ffdeb", size = 28281, upload-time = "2023-07-07T19:31:31.429Z" },
 ]
 
 [[package]]
