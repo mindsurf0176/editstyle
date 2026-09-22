@@ -168,6 +168,12 @@ class TestRuleBasedColor:
         colors = [op for op in plan.operations if isinstance(op, ColorGradeOperation)]
         assert colors[0].preset == "cool"
 
+    def test_cool_tone_phrasing_mirrors_warm_tone(self, sample_analysis):
+        plan = _try_rule_based(sample_analysis, "차가운 톤으로 색보정해줘")
+        assert plan is not None
+        colors = [op for op in plan.operations if isinstance(op, ColorGradeOperation)]
+        assert colors[0].preset == "cool"
+
 
 # ── BGM rules ────────────────────────────────────────────────────────────────
 

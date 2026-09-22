@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src http://127.0.0.1:18910 ws://127.0.0.1:18910; img-src 'self' http://127.0.0.1:18910 blob: data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src http://127.0.0.1:18910 ws://127.0.0.1:18910; img-src 'self' http://127.0.0.1:18910 blob: data:; media-src 'self' http://127.0.0.1:18910 blob:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

@@ -85,7 +85,7 @@ export default function JobProgress() {
     const syncJob = async () => {
       try {
         const job = await pollJob(activeJob.job_id);
-        dispatch({ type: 'SET_ACTIVE_JOB', job });
+        dispatch({ type: 'SYNC_ACTIVE_JOB', job });
       } catch {
         // ignore sync errors
       }
@@ -96,6 +96,7 @@ export default function JobProgress() {
       (data) => {
         dispatch({
           type: 'UPDATE_JOB_PROGRESS',
+          jobId: activeJob.job_id,
           progress: data.progress,
           status: data.status as 'running' | 'completed' | 'failed',
         });
@@ -108,7 +109,7 @@ export default function JobProgress() {
         pollRef.current = setInterval(async () => {
           try {
             const job = await pollJob(activeJob.job_id);
-            dispatch({ type: 'SET_ACTIVE_JOB', job });
+            dispatch({ type: 'SYNC_ACTIVE_JOB', job });
             if (job.status === 'completed' || job.status === 'failed') {
               if (pollRef.current) clearInterval(pollRef.current);
             }
@@ -143,7 +144,7 @@ export default function JobProgress() {
           || activeJob.progress !== completedJob.progress
           || activeJob.error !== completedJob.error
         ) {
-          dispatch({ type: 'SET_ACTIVE_JOB', job: completedJob });
+          dispatch({ type: 'SYNC_ACTIVE_JOB', job: completedJob });
         }
 
         if (completedJob.type === 'analysis' && state.videoId) {
@@ -198,13 +199,6 @@ export default function JobProgress() {
           dispatch({ type: 'SET_VIEW', view: 'editor' });
         }
 
-        if (completedJob.type === 'analysis') {
-          setTimeout(() => {
-            if (isSubscribed) {
-              dispatch({ type: 'CLEAR_JOB' });
-            }
-          }, 3000);
-        }
       } catch (e) {
         console.error('Failed to finalize job:', e);
       }
@@ -216,6 +210,15 @@ export default function JobProgress() {
       isSubscribed = false;
     };
   }, [activeJob, state.videoId, dispatch]);
+
+  // Keyed on job identity, not on the job object: status syncs recreate the
+  // object and would otherwise cancel the dismissal timer before it fires.
+  useEffect(() => {
+    if (activeJob?.status !== 'completed' || activeJob.type !== 'analysis') return;
+
+    const timer = setTimeout(() => dispatch({ type: 'CLEAR_JOB' }), 3000);
+    return () => clearTimeout(timer);
+  }, [activeJob?.job_id, activeJob?.status, activeJob?.type, dispatch]);
 
   useEffect(() => {
     if (!activeJob || exportFeedback?.jobId === activeJob.job_id) {
@@ -381,7 +384,7 @@ export default function JobProgress() {
                       getPreviewDownloadUrl(activeJob.job_id)
                     )
                   }
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-white text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
                 >
                   <Download size={14} />
                   Save preview as
@@ -391,7 +394,7 @@ export default function JobProgress() {
                   href={getPreviewDownloadUrl(activeJob.job_id)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-white text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
                 >
                   <Download size={14} />
                   Download preview
@@ -438,7 +441,7 @@ export default function JobProgress() {
                       getDownloadUrl(activeJob.job_id)
                     )
                   }
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-white text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
                 >
                   <Download size={14} />
                   Export render
@@ -448,7 +451,7 @@ export default function JobProgress() {
                   href={getDownloadUrl(activeJob.job_id)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-white text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
                 >
                   <Download size={14} />
                   Download render

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -371,13 +372,13 @@ async def _run_analysis(
     """Background task for video analysis — step-by-step with progress updates."""
     jobs[job_id]["status"] = "running"
     jobs[job_id]["progress"] = 5.0
+    audio_tmpdir: str | None = None
     try:
         from pathlib import Path as _Path
 
         from cutai.analyzer import _extract_audio_cached, _get_video_metadata, _is_scene_silent
         from cutai.analyzer.quality_analyzer import analyze_quality
         from cutai.analyzer.scene_detector import detect_scenes
-        from cutai.analyzer.transcriber import transcribe
         from cutai.models.types import VideoAnalysis
 
         # Step 0: Get video metadata (5% -> 10%)
@@ -402,6 +403,8 @@ async def _run_analysis(
         # Step 3: Transcription (50% -> 75%)
         transcript: list = []
         if not skip_transcription:
+            from cutai.analyzer.transcriber import transcribe
+
             transcribe_input = audio_file if audio_file else video_path
             transcript = await asyncio.to_thread(
                 transcribe, transcribe_input, model_name=whisper_model
@@ -431,11 +434,6 @@ async def _run_analysis(
                 scene.avg_energy = quality.audio_energy[i]
         jobs[job_id]["progress"] = 95.0
 
-        # Clean up shared audio temp directory
-        import shutil as _shutil
-
-        _shutil.rmtree(audio_tmpdir, ignore_errors=True)
-
         # Assemble VideoAnalysis
         analysis = VideoAnalysis(
             file_path=str(_Path(video_path).resolve()),
@@ -459,6 +457,9 @@ async def _run_analysis(
         logger.exception("Analysis failed for job %s", job_id)
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
+    finally:
+        if audio_tmpdir is not None:
+            shutil.rmtree(audio_tmpdir, ignore_errors=True)
 
 
 # ── 3. Planning ──────────────────────────────────────────────────────────────
@@ -509,6 +510,16 @@ async def generate_plan(req: PlanRequest) -> dict:
 # ── 4. Rendering ─────────────────────────────────────────────────────────────
 
 
+def _validate_media_request(plan_data: dict, analysis_data: dict) -> None:
+    from cutai.editor.renderer import validate_render_plan
+    from cutai.models.types import EditPlan, VideoAnalysis
+
+    try:
+        validate_render_plan(EditPlan(**plan_data), VideoAnalysis(**analysis_data))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/api/render")
 async def start_render(req: RenderRequest) -> dict:
     """Start rendering as a background task. Returns job_id."""
@@ -520,6 +531,8 @@ async def start_render(req: RenderRequest) -> dict:
             status_code=400,
             detail="Video must be analyzed first. POST /api/videos/{video_id}/analyze",
         )
+
+    _validate_media_request(req.plan, analysis_data)
 
     # Determine output path
     output_path = req.output_path
@@ -567,6 +580,8 @@ async def start_preview(req: PreviewRequest) -> dict:
             status_code=400,
             detail="Video must be analyzed first. POST /api/videos/{video_id}/analyze",
         )
+
+    _validate_media_request(req.plan, analysis_data)
 
     output_path = req.output_path
     if not output_path:
@@ -616,7 +631,12 @@ async def _run_render(
     try:
         from pathlib import Path as _Path
 
-        from cutai.editor.renderer import _adjust_transcript_for_cuts, _compute_cut_points
+        from cutai.editor.renderer import (
+            _adjust_transcript_for_cuts,
+            _compute_cut_points,
+            _remap_transitions,
+            validate_render_plan,
+        )
         from cutai.models.types import (
             BGMOperation,
             ColorGradeOperation,
@@ -630,6 +650,7 @@ async def _run_render(
 
         analysis = VideoAnalysis(**analysis_data)
         edit_plan = EditPlan(**plan_data)
+        validate_render_plan(edit_plan, analysis)
         preset_spec = RENDER_PRESETS[render_preset]
         burn_subtitles = subtitle_export_mode == "burned"
         subtitle_result: dict[str, Any] = {}
@@ -720,7 +741,9 @@ async def _run_render(
                 sub_op = sub_ops[0]
                 transcript = analysis.transcript
                 if cut_ops:
-                    transcript = _adjust_transcript_for_cuts(analysis.transcript, cut_ops)
+                    transcript = _adjust_transcript_for_cuts(
+                        analysis.transcript, cut_ops, analysis.duration
+                    )
 
                 if burn_subtitles:
                     ass_path = str(_Path(tmpdir_obj) / "subtitles.ass")
@@ -751,7 +774,8 @@ async def _run_render(
                 if cut_points:
                     trans_output = str(_Path(tmpdir_obj) / "step6_trans.mp4")
                     current_video = await asyncio.to_thread(
-                        apply_transitions, current_video, trans_ops, cut_points, trans_output,
+                        apply_transitions, current_video,
+                        _remap_transitions(analysis, cut_ops, trans_ops), cut_points, trans_output,
                     )
                 current_progress += progress_per_step
                 jobs[job_id]["progress"] = round(current_progress, 1)
@@ -810,11 +834,13 @@ async def _run_preview(
     try:
         from pathlib import Path as _Path
 
+        from cutai.editor.renderer import validate_render_plan
         from cutai.models.types import EditPlan, VideoAnalysis
         from cutai.preview import render_preview
 
         analysis = VideoAnalysis(**analysis_data)
         edit_plan = EditPlan(**plan_data)
+        validate_render_plan(edit_plan, analysis)
 
         _Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         jobs[job_id]["progress"] = 35.0

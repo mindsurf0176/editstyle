@@ -665,6 +665,23 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
+    fn native_media_policy_allows_local_preview_and_render_playback() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("Tauri config");
+        let policy = config["app"]["security"]["csp"].as_str().expect("CSP");
+        let media = policy
+            .split(';')
+            .map(str::trim)
+            .find(|directive| directive.starts_with("media-src "))
+            .expect("explicit media policy");
+
+        assert!(media
+            .split_whitespace()
+            .any(|source| source == "http://127.0.0.1:18910"));
+        assert!(!media.split_whitespace().any(|source| source == "*"));
+    }
+
+    #[test]
     fn companion_destination_uses_selected_video_basename() {
         let primary = PathBuf::from("/tmp/My Clip-render.mp4");
         let companion = Path::new("/tmp/render.ass");

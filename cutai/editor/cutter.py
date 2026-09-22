@@ -20,7 +20,7 @@ def apply_cuts(
     video_path: str,
     operations: list[CutOperation],
     output_path: str,
-    force_reencode: bool = False,
+    force_reencode: bool = True,
 ) -> str:
     """Apply cut operations to a video.
 
@@ -29,15 +29,15 @@ def apply_cuts(
     2. Extract each "keep" segment as a temp file.
     3. Concatenate all segments.
 
-    Uses stream copy (``-c copy``) by default for speed — no re-encoding.
-    Set ``force_reencode=True`` only when downstream filters (e.g. subtitle
-    burning) require a clean keyframe-aligned stream.
+    Re-encodes by default so cuts honor the requested times even between
+    keyframes. Explicit ``force_reencode=False`` opts into faster, approximate
+    stream-copy cuts which can retain content before the requested start.
 
     Args:
         video_path: Path to the source video.
         operations: List of CutOperations.
         output_path: Path for the output video.
-        force_reencode: If True, re-encode segments instead of stream copy.
+        force_reencode: Re-encode for accurate cuts (default True).
 
     Returns:
         Path to the output video.
@@ -150,14 +150,13 @@ def _extract_segment(
     start: float,
     end: float,
     output_path: str,
-    stream_copy: bool = True,
+    stream_copy: bool = False,
 ) -> None:
     """Extract a single segment from the video.
 
     Args:
-        stream_copy: If True (default), use ``-c copy`` for fast extraction
-            without re-encoding. If False, re-encode (needed when downstream
-            filters like subtitle burning require clean keyframes).
+        stream_copy: If True, use approximate ``-c copy`` extraction.
+            The default False re-encodes to honor the requested start and end.
     """
     duration = end - start
     cmd = [

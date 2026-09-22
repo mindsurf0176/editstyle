@@ -178,7 +178,14 @@ def _transcribe_openai_whisper(
     """Transcribe using openai-whisper (original, slower)."""
     logger.info("Loading Whisper model '%s'...", model_name)
 
-    import whisper
+    try:
+        import whisper
+    except ImportError as exc:
+        raise RuntimeError(
+            "Audio transcription is not installed. Install the cutai-transcription extra "
+            "(uv sync --extra cutai --extra cutai-transcription), or analyze without "
+            "transcription (--no-transcript / skip_transcription=true)."
+        ) from exc
 
     model = whisper.load_model(model_name)
 

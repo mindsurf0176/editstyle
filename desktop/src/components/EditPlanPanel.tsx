@@ -1,5 +1,5 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Scissors,
   Subtitles,
@@ -18,6 +18,7 @@ import {
   RENDER_PRESET_OPTIONS,
   SUBTITLE_EXPORT_MODE_OPTIONS,
 } from '../types';
+import type { EditOperation } from '../types';
 
 const OPERATION_ICONS: Record<string, typeof Scissors> = {
   cut: Scissors,
@@ -34,8 +35,30 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// Surfaces the attribute that tells two operations of the same type apart.
+function operationDetail(op: EditOperation): string | null {
+  const value = (key: string) => (typeof op[key] === 'string' ? (op[key] as string) : null);
+  switch (op.type) {
+    case 'colorgrade':
+      return value('preset');
+    case 'bgm':
+      return value('mood');
+    case 'transition':
+      return value('transition_type') ?? value('style');
+    case 'subtitle':
+      return value('style');
+    case 'speed': {
+      const factor = op.speed_factor ?? op.factor;
+      return typeof factor === 'number' ? `${factor}x` : null;
+    }
+    default:
+      return null;
+  }
+}
+
 export default function EditPlanPanel() {
   const { state, dispatch } = useApp();
+  const [starting, setStarting] = useState(false);
   const {
     editPlan,
     videoId,
@@ -51,8 +74,9 @@ export default function EditPlanPanel() {
 
   const previewBusy = activeJob?.type === 'preview' && activeJob.status !== 'failed' && activeJob.status !== 'completed';
   const renderBusy = activeJob?.type === 'render' && activeJob.status !== 'failed' && activeJob.status !== 'completed';
-  const canPreview = Boolean(videoId && analysis && !previewBusy);
-  const canRender = Boolean(videoId && analysis && editPlan.operations.length > 0 && !renderBusy);
+  const busy = starting || (activeJob?.status === 'running' || activeJob?.status === 'pending');
+  const canPreview = Boolean(videoId && analysis && !busy);
+  const canRender = Boolean(videoId && analysis && editPlan.operations.length > 0 && !busy);
   const hasSubtitleOperation = editPlan.operations.some((operation) => operation.type === 'subtitle');
   const selectedRenderPreset = RENDER_PRESET_OPTIONS.find((preset) => preset.value === renderPreset)
     ?? RENDER_PRESET_OPTIONS[1];
@@ -69,34 +93,42 @@ export default function EditPlanPanel() {
         : null;
 
   const handleRender = async () => {
-    if (!videoId || !editPlan || !analysis || renderBusy) return;
+    if (!videoId || !editPlan || !analysis || busy) return;
+    setStarting(true);
     try {
       const { job_id } = await startRender(videoId, editPlan, renderPreset, subtitleExportMode);
       dispatch({ type: 'SET_RENDER_RESULT', render: null });
       dispatch({
         type: 'SET_ACTIVE_JOB',
+        revision: state.editRevision,
         job: { job_id, type: 'render', status: 'running', progress: 0 },
       });
       dispatch({ type: 'SET_VIEW', view: 'rendering' });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start render';
       dispatch({ type: 'SET_ERROR', error: msg });
+    } finally {
+      setStarting(false);
     }
   };
 
   const handlePreview = async () => {
-    if (!videoId || !editPlan || !analysis || previewBusy) return;
+    if (!videoId || !editPlan || !analysis || busy) return;
+    setStarting(true);
     try {
       const { job_id } = await startPreview(videoId, editPlan, previewResolution);
       dispatch({ type: 'SET_PREVIEW_RESULT', preview: null });
       dispatch({
         type: 'SET_ACTIVE_JOB',
+        revision: state.editRevision,
         job: { job_id, type: 'preview', status: 'running', progress: 0 },
       });
       dispatch({ type: 'SET_VIEW', view: 'editor' });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start preview';
       dispatch({ type: 'SET_ERROR', error: msg });
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -108,6 +140,7 @@ export default function EditPlanPanel() {
           variant="ghost" 
           size="sm" 
           onClick={() => dispatch({ type: 'CLEAR_EDIT_PLAN' })}
+          disabled={busy}
           className="h-6 px-2 text-xs text-text-secondary hover:text-accent hover:bg-accent/10"
         >
           Clear
@@ -134,11 +167,11 @@ export default function EditPlanPanel() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium capitalize text-text-secondary">
-                  {op.type}
+                  {op.type === 'cut' ? `Cut · ${String(op.action ?? '')}` : op.type}
                 </p>
-                {op.description && (
+                {(op.description || op.reason || operationDetail(op)) && (
                   <p className="text-[11px] text-text-muted truncate">
-                    {op.description}
+                    {op.description || op.reason || operationDetail(op)}
                   </p>
                 )}
                 {op.start_time !== undefined && op.end_time !== undefined && (
@@ -149,7 +182,9 @@ export default function EditPlanPanel() {
               </div>
               <Button
                 onClick={() => dispatch({ type: 'REMOVE_OPERATION', index })}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent/10 transition-all"
+                aria-label={`Remove operation ${index + 1}`}
+                disabled={busy}
+                className="p-1 rounded hover:bg-accent/10 transition-all"
               >
                 <Trash2 size={12} className="text-accent" />
               </Button>
@@ -180,7 +215,7 @@ export default function EditPlanPanel() {
                   key={resolution}
                   type="button"
                   onClick={() => dispatch({ type: 'SET_PREVIEW_RESOLUTION', resolution })}
-                  disabled={previewBusy}
+                  disabled={busy}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     selected
                       ? 'bg-accent text-text-primary'
@@ -211,7 +246,7 @@ export default function EditPlanPanel() {
                     key={preset.value}
                     type="button"
                     onClick={() => dispatch({ type: 'SET_RENDER_PRESET', renderPreset: preset.value })}
-                    disabled={renderBusy}
+                    disabled={busy}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                       selected
                         ? 'bg-accent text-text-primary'
@@ -248,7 +283,7 @@ export default function EditPlanPanel() {
                       type: 'SET_SUBTITLE_EXPORT_MODE',
                       subtitleExportMode: option.value,
                     })}
-                    disabled={renderBusy}
+                    disabled={busy}
                     className={`rounded-lg border px-3 py-2 text-left transition-colors ${
                       selected
                         ? 'border-accent bg-accent/20'
@@ -266,36 +301,40 @@ export default function EditPlanPanel() {
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2">
           <Button
             onClick={handlePreview}
             disabled={!canPreview}
             title={!canPreview ? validationMessage ?? 'Preview is already running' : undefined}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg
               bg-bg-elevated text-text-primary text-sm font-medium
               hover:bg-bg-panel
               disabled:opacity-40 disabled:cursor-not-allowed
               transition-colors"
           >
-            <Play size={14} />
-            {previewBusy
-              ? `Previewing ${previewResolution}p`
-              : previewResult
-                ? `Refresh ${previewResolution}p`
-                : `Preview ${previewResolution}p`}
+            <Play size={14} className="flex-shrink-0" />
+            <span className="truncate">
+              {previewBusy
+                ? `Previewing ${previewResolution}p`
+                : previewResult
+                  ? `Refresh ${previewResolution}p`
+                  : `Preview ${previewResolution}p`}
+            </span>
           </Button>
           <Button
             onClick={handleRender}
             disabled={!canRender}
             title={!canRender ? validationMessage ?? 'Render is already running' : undefined}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg
               bg-accent text-text-primary text-sm font-medium
               hover:bg-accent/90
               disabled:opacity-40 disabled:cursor-not-allowed
               transition-colors"
           >
-            <Download size={14} />
-            {renderBusy ? `Rendering ${selectedRenderPreset.label}` : `Render ${selectedRenderPreset.label}`}
+            <Download size={14} className="flex-shrink-0" />
+            <span className="truncate">
+              {renderBusy ? `Rendering ${selectedRenderPreset.label}` : `Render ${selectedRenderPreset.label}`}
+            </span>
           </Button>
         </div>
       </div>

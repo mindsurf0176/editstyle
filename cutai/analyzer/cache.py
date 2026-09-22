@@ -31,15 +31,17 @@ CACHE_DIR_NAME = ".cutai-cache"
 GLOBAL_CACHE_DIR = Path.home() / ".cutai" / "cache"
 
 
-def _cache_key(video_path: str, whisper_model: str = "base") -> str:
+def _cache_key(
+    video_path: str, whisper_model: str = "base", skip_transcription: bool = False
+) -> str:
     """Generate a stable cache key from file metadata.
 
-    Uses path basename + file size + mtime + whisper model to avoid
+    Uses path + file size + mtime + transcription settings to avoid
     stale cache hits when the file changes.
     """
     p = Path(video_path).resolve()
     stat = p.stat()
-    raw = f"{p.name}:{stat.st_size}:{stat.st_mtime_ns}:{whisper_model}"
+    raw = f"{p}:{stat.st_size}:{stat.st_mtime_ns}:{whisper_model}:{skip_transcription}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -66,18 +68,20 @@ def _can_create(path: Path) -> bool:
 def get_cached(
     video_path: str,
     whisper_model: str = "base",
+    skip_transcription: bool = False,
 ) -> VideoAnalysis | None:
     """Look up a cached analysis result.
 
     Args:
         video_path: Path to the video file.
         whisper_model: Whisper model used (affects cache key).
+        skip_transcription: Whether transcription was disabled (affects cache key).
 
     Returns:
         VideoAnalysis if a valid cache entry exists, None otherwise.
     """
     try:
-        key = _cache_key(video_path, whisper_model)
+        key = _cache_key(video_path, whisper_model, skip_transcription)
         cache_file = _cache_dir(video_path) / f"{key}.json"
 
         if not cache_file.exists():
@@ -96,6 +100,7 @@ def save_cache(
     video_path: str,
     analysis: VideoAnalysis,
     whisper_model: str = "base",
+    skip_transcription: bool = False,
 ) -> None:
     """Save an analysis result to the cache.
 
@@ -103,9 +108,10 @@ def save_cache(
         video_path: Path to the video file.
         analysis: The analysis to cache.
         whisper_model: Whisper model used (affects cache key).
+        skip_transcription: Whether transcription was disabled (affects cache key).
     """
     try:
-        key = _cache_key(video_path, whisper_model)
+        key = _cache_key(video_path, whisper_model, skip_transcription)
         cache_file = _cache_dir(video_path) / f"{key}.json"
         cache_file.write_text(
             analysis.model_dump_json(indent=2),

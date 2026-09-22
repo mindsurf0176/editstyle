@@ -37,7 +37,7 @@ RUNTIME_PIP="$RUNTIME_DIR/bin/pip"
 
 log "Installing CutAI backend into the bundled runtime"
 "$RUNTIME_PIP" install --upgrade pip setuptools wheel
-"$RUNTIME_PIP" install "$ROOT_DIR"
+"$RUNTIME_PIP" install "$ROOT_DIR[cutai]"
 
 python_version="$("$RUNTIME_PYTHON" -c 'import platform; print(platform.python_version())')"
 release_ready=false

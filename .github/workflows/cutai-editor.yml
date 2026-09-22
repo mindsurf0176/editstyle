@@ -1,0 +1,33 @@
+name: CutAI editor restoration
+
+on:
+  push:
+    branches: ["revival/cutai-editor"]
+  workflow_dispatch:
+
+jobs:
+  editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install local editor runtime and coexistence test dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install -e ".[cutai,app,mcp,dev]"
+      - name: Python regression tests
+        run: python -m pytest tests -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Desktop tests and production frontend build
+        working-directory: desktop
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm build

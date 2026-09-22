@@ -14,22 +14,38 @@ dependencies = []
 [project.optional-dependencies]
 mcp = ["mcp>=1.28,<2"]
 app = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "python-multipart>=0.0.20", "opentimelineio>=0.18,<0.19", "otio-fcp-adapter>=1,<2"]
-dev = ["ruff>=0.1", "build>=1"]
+cutai = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "httpx>=0.27,<1",
+    "python-multipart>=0.0.20",
+    "pydantic>=2,<3",
+    "pyyaml>=6,<7",
+    "typer>=0.9,<1",
+    "rich>=13,<15",
+    "scenedetect>=0.6,<0.7",
+    "opencv-python-headless>=4.8,<5",
+]
+cutai-transcription = ["faster-whisper>=1,<2"]
+cutai-llm = ["openai>=1,<3"]
+dev = ["ruff>=0.1", "build>=1", "pytest>=7,<10"]
 
 [project.scripts]
 editstyle = "editstyle.catalog:main"
 editstyle-mcp = "editstyle.mcp_server:main"
 editstyle-app = "editstyle.app:main"
+cutai = "cutai.cli:app_entry"
 
 [project.urls]
 Repository = "https://github.com/mindsurf0176/editstyle"
 Issues = "https://github.com/mindsurf0176/editstyle/issues"
 
 [tool.setuptools.packages.find]
-include = ["editstyle*"]
+include = ["editstyle*", "cutai*"]
 
 [tool.setuptools.package-data]
 editstyle = ["presets/*.md", "web/*"]
+cutai = ["style/presets/*.yaml", "planner/prompts/*.md"]
 
 [tool.ruff]
 target-version = "py310"

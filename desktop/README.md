@@ -1,5 +1,21 @@
 # CutAI Desktop (Tauri)
 
+## 2026-09-22 restoration branch
+
+`revival/cutai-editor` restores the editor separately from editstyle's skill-first track.
+From the repository root, run `uv sync --extra cutai --extra dev` before the frontend
+commands below. Imports use local scene/audio analysis by default, without speech
+transcription or an LLM request. Speech transcription is an explicit checkbox and needs
+the `cutai-transcription` extra plus a downloaded Whisper model.
+
+Use Source Timeline's Start/End fields to keep/remove source-time ranges, then preview
+or render from the restored Edit panel. Undo and later instructions preserve previous
+manual cuts; changes invalidate generated outputs. Current edit state is not a saved
+project: a reload/restart clears it. Save exported videos before leaving the session.
+
+See [the current restoration record](../docs/CUTAI_RESTORATION.md) for evidence and
+limitations. Historical validation notes below are not proof of a distributable release.
+
 CutAI Desktop is the local macOS desktop shell for the CutAI editing engine.
 It wraps the Python backend with a Tauri + React UI so the main happy path works without opening a terminal.
 

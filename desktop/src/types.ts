@@ -33,11 +33,35 @@ export interface VideoAnalysis {
   };
 }
 
+export type TimelineSelection =
+  | { type: 'none' }
+  | { type: 'playhead'; time: number }
+  | { type: 'range'; start_time: number; end_time: number }
+  | { type: 'operation'; operation_index: number };
+
+export interface CommandResultSummary {
+  command_id: string;
+  instruction: string;
+  changed_operations: number;
+  duration_before?: number;
+  duration_after?: number;
+  messages: string[];
+}
+
 export interface EditOperation {
-  type: 'cut' | 'subtitle' | 'bgm' | 'colorgrade' | 'transition' | 'speed';
+  type:
+    | 'cut'
+    | 'subtitle'
+    | 'bgm'
+    | 'colorgrade'
+    | 'transition'
+    | 'speed';
   start_time?: number;
   end_time?: number;
   description?: string;
+  reason?: string;
+  editable?: boolean;
+  confidence?: number;
   [key: string]: unknown;
 }
 

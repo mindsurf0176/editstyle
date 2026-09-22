@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { useApp } from '../store';
 import { generateHighlights } from '../api';
@@ -15,6 +15,9 @@ export default function HighlightsPanel() {
   const [targetMinutes, setTargetMinutes] = useState(1);
   const [style, setStyle] = useState(DEFAULT_STYLE);
   const [loading, setLoading] = useState(false);
+  const revision = useRef(state.editRevision);
+  revision.current = state.editRevision;
+  const busy = loading || state.activeJob?.status === 'pending' || state.activeJob?.status === 'running';
 
   const maxMinutes = useMemo(() => {
     const duration = state.analysis?.duration ?? state.videoInfo?.duration ?? 0;
@@ -22,15 +25,18 @@ export default function HighlightsPanel() {
   }, [state.analysis?.duration, state.videoInfo?.duration]);
 
   const handleGenerate = async () => {
-    if (!state.videoId) return;
+    if (!state.videoId || !state.analysis || busy) return;
+    const requestedRevision = state.editRevision;
 
     setLoading(true);
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
       const { job_id } = await generateHighlights(state.videoId, targetMinutes * 60, style);
+      if (revision.current !== requestedRevision) throw new Error('The edit changed. Generate highlights again.');
       dispatch({
         type: 'SET_ACTIVE_JOB',
+        revision: requestedRevision,
         job: { job_id, type: 'highlights', status: 'running', progress: 0 },
       });
       dispatch({ type: 'SET_VIEW', view: 'editor' });
@@ -96,8 +102,8 @@ export default function HighlightsPanel() {
       <div className="px-4 py-3 border-t border-[#27272a]">
         <button
           onClick={handleGenerate}
-          disabled={!state.videoId || loading}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#ffffff] text-white text-sm font-medium hover:bg-[#e4e4e7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          disabled={!state.videoId || !state.analysis || busy}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
           Generate highlights

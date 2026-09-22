@@ -89,7 +89,7 @@ describe('api', () => {
         body: JSON.stringify({
           video_id: 'video-plan',
           instruction: 'make it snappier',
-          use_llm: true,
+          use_llm: false,
           style_preset: 'cinematic.yaml',
         }),
       })
@@ -144,14 +144,15 @@ describe('api', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await startRender('video-4', plan, 'balanced', 'sidecar');
+    const subtitlePlan: EditPlan = { ...plan, operations: [{ type: 'subtitle' }] };
+    await startRender('video-4', subtitlePlan, 'balanced', 'sidecar');
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:18910/api/render',
       expect.objectContaining({
         body: JSON.stringify({
           video_id: 'video-4',
-          plan,
+          plan: subtitlePlan,
           render_preset: 'balanced',
           subtitle_export_mode: 'sidecar',
         }),
@@ -163,6 +164,13 @@ describe('api', () => {
     expect(getRenderVideoUrl('render-job-1')).toBe(
       'http://127.0.0.1:18910/api/render/render-job-1/video'
     );
+  });
+
+  it('does not request a missing sidecar when the subtitle operation was removed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ job_id: 'cut-only' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await startRender('video-no-subtitle', plan, 'balanced', 'sidecar');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).subtitle_export_mode).toBe('burned');
   });
 
   it('builds sensible export filenames from the original video name and media kind', () => {
@@ -214,8 +222,7 @@ describe('api', () => {
     );
 
     expect(invoke).toHaveBeenCalledWith('save_exported_file', {
-      sourcePath: '/tmp/output.mp4',
-      defaultFileName: 'clip-render.mp4',
+      request: { sourcePath: '/tmp/output.mp4', defaultFileName: 'clip-render.mp4' },
     });
   });
 
@@ -254,9 +261,11 @@ describe('api', () => {
     });
 
     expect(invoke).toHaveBeenCalledWith('save_export_bundle', {
-      primarySourcePath: '/tmp/render.mp4',
-      companionSourcePaths: ['/tmp/render.ass'],
-      defaultFileName: 'clip-render.mp4',
+      request: {
+        primarySourcePath: '/tmp/render.mp4',
+        companionSourcePaths: ['/tmp/render.ass'],
+        defaultFileName: 'clip-render.mp4',
+      },
     });
   });
 

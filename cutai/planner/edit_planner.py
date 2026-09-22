@@ -227,7 +227,7 @@ def _try_rule_based(analysis: VideoAnalysis, instruction: str) -> EditPlan | Non
         operations.append(ColorGradeOperation(preset="vintage"))
         summary_parts.append("Apply vintage color grade")
 
-    elif _matches_any(lower, ["차갑게", "cool", "차가운 느낌", "쿨톤"]):
+    elif _matches_any(lower, ["차갑게", "cool", "차가운 느낌", "차가운 톤", "쿨톤"]):
         rule_matched = True
         operations.append(ColorGradeOperation(preset="cool"))
         summary_parts.append("Apply cool color grade")

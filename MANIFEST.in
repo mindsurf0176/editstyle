@@ -17,3 +17,5 @@ include docs/COMPANION.md
 include DESIGN.md
 include docs/LEGACY_CUTAI.md
 include docs/legacy-pyproject.toml
+include docs/CUTAI_RESTORATION.md
+include scripts/qa-cutai-editor.py

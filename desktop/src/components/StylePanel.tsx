@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Palette, Check, Loader2 } from 'lucide-react';
 import { useApp } from '../store';
 import { getPresets, getPreset, applyStyle } from '../api';
@@ -8,6 +8,9 @@ export default function StylePanel() {
   const [applying, setApplying] = useState<string | null>(null);
   const [applied, setApplied] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const current = useRef(state);
+  current.current = state;
+  const busy = applying !== null || state.activeJob?.status === 'pending' || state.activeJob?.status === 'running';
 
   useEffect(() => {
     if (state.presets.length > 0) return;
@@ -27,7 +30,8 @@ export default function StylePanel() {
   }, [dispatch, state.presets.length]);
 
   const handleApply = async (presetName: string) => {
-    if (!state.videoId) return;
+    if (!state.videoId || !state.analysis || busy) return;
+    const revision = state.editRevision;
     setApplying(presetName);
     setApplied(null);
     dispatch({ type: 'SET_ERROR', error: null });
@@ -35,7 +39,13 @@ export default function StylePanel() {
     try {
       const preset = await getPreset(presetName);
       const plan = await applyStyle(state.videoId, preset);
-      dispatch({ type: 'SET_EDIT_PLAN', plan });
+      if (current.current.editRevision !== revision) {
+        throw new Error('The edit changed while applying the style. Please review and apply again.');
+      }
+      if (plan.operations.some((operation) => operation.type === 'subtitle') && !state.analysis.transcript.length) {
+        throw new Error('This preset needs a transcript. Enable speech transcription and import the video again.');
+      }
+      dispatch({ type: 'SET_EDIT_PLAN', plan, revision });
       const selectedPreset = state.presets.find((candidate) => candidate.name === presetName) ?? null;
       dispatch({ type: 'SET_PLANNING_STYLE_PRESET', preset: selectedPreset });
       dispatch({ type: 'SET_SIDEBAR_TAB', tab: 'edit' });
@@ -164,7 +174,7 @@ export default function StylePanel() {
                     disabled={isApplying}
                     className={`rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       isSelectedForPlanning
-                        ? 'bg-[#ffffff] text-white'
+                        ? 'bg-[#ffffff] text-[#111315]'
                         : 'bg-[#000000] text-[#fafafa] hover:bg-[#18181b]'
                     }`}
                   >
@@ -173,7 +183,7 @@ export default function StylePanel() {
                   <button
                     type="button"
                     onClick={() => handleApply(preset.name)}
-                    disabled={!state.videoId || isApplying}
+                    disabled={!state.videoId || !state.analysis || busy}
                     className="rounded-md px-3 py-1.5 text-[11px] font-medium text-[#a1a1aa] bg-[#000000] hover:bg-[#18181b] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     {isApplying ? 'Applying…' : 'Apply now'}

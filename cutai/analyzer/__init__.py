@@ -68,7 +68,9 @@ def analyze_video(
 
     # Check cache first
     from cutai.analyzer.cache import get_cached, save_cache
-    cached = get_cached(str(path), whisper_model=whisper_model)
+    cached = get_cached(
+        str(path), whisper_model=whisper_model, skip_transcription=skip_transcription
+    )
     if cached is not None:
         logger.info("Using cached analysis for %s", path.name)
         return cached
@@ -100,10 +102,10 @@ def analyze_video(
             logger.warning("Shared audio extraction failed (%s), modules will extract individually", exc)
 
         # 2. Transcription (optional — can be slow)
-        from cutai.analyzer.transcriber import transcribe
-
         transcript = []
         if not skip_transcription:
+            from cutai.analyzer.transcriber import transcribe
+
             # Use cached audio if available, otherwise transcriber will handle the video directly
             transcribe_input = audio_file if audio_file else str(path)
             transcript = transcribe(transcribe_input, model_name=whisper_model)
@@ -153,7 +155,9 @@ def analyze_video(
     )
 
     # Save to cache for next time
-    save_cache(str(path), analysis, whisper_model=whisper_model)
+    save_cache(
+        str(path), analysis, whisper_model=whisper_model, skip_transcription=skip_transcription
+    )
 
     return analysis
 

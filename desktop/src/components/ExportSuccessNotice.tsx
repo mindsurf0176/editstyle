@@ -58,7 +58,7 @@ export default function ExportSuccessNotice({
         <button
           type="button"
           onClick={onOpen}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#e4e4e7]"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] transition-colors hover:bg-[#e4e4e7]"
         >
           <ExternalLink size={13} />
           Open file

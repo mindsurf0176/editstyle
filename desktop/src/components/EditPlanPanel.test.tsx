@@ -155,6 +155,7 @@ describe('EditPlanPanel preview resolution flow', () => {
     expect(dispatchedActions).toContainEqual({ type: 'SET_PREVIEW_RESULT', preview: null });
     expect(dispatchedActions).toContainEqual({
       type: 'SET_ACTIVE_JOB',
+      revision: 0,
       job: { job_id: 'preview-job-720', type: 'preview', status: 'running', progress: 0 },
     });
     expect(dispatchedActions).toContainEqual({ type: 'SET_VIEW', view: 'editor' });
@@ -208,6 +209,7 @@ describe('EditPlanPanel preview resolution flow', () => {
     expect(dispatchedActions).toContainEqual({ type: 'SET_RENDER_RESULT', render: null });
     expect(dispatchedActions).toContainEqual({
       type: 'SET_ACTIVE_JOB',
+      revision: 0,
       job: { job_id: 'render-job-high', type: 'render', status: 'running', progress: 0 },
     });
     expect(dispatchedActions).toContainEqual({ type: 'SET_VIEW', view: 'rendering' });
@@ -264,5 +266,36 @@ describe('EditPlanPanel preview resolution flow', () => {
       'balanced',
       'sidecar'
     );
+  });
+
+  it('shows the colour grade preset so two grades are distinguishable', async () => {
+    function Harness() {
+      const [state] = React.useState(() =>
+        createState({
+          editPlan: {
+            instruction: '차가운 톤으로 색보정해줘',
+            operations: [{ type: 'colorgrade', preset: 'cool', intensity: 50 }],
+            estimated_duration: 42,
+            summary: 'Apply cool color grade',
+          },
+        })
+      );
+
+      return (
+        <AppContext.Provider value={{ state, dispatch: () => {} }}>
+          <EditPlanPanel />
+        </AppContext.Provider>
+      );
+    }
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    expect(container.textContent).toContain('cool');
   });
 });

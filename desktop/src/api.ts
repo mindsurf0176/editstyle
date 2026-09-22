@@ -133,8 +133,7 @@ export async function exportNativePath(
   if (!sourcePath) return null;
 
   return invoke<string | null>('save_exported_file', {
-    sourcePath,
-    defaultFileName,
+    request: { sourcePath, defaultFileName },
   });
 }
 
@@ -160,9 +159,11 @@ export async function exportNativeBundle(
   }
 
   return invoke<ExportBundleSaveResult | null>('save_export_bundle', {
-    primarySourcePath: primaryArtifact.path,
-    companionSourcePaths: companionArtifacts.map((artifact) => artifact.path),
-    defaultFileName,
+    request: {
+      primarySourcePath: primaryArtifact.path,
+      companionSourcePaths: companionArtifacts.map((artifact) => artifact.path),
+      defaultFileName,
+    },
   });
 }
 
@@ -172,8 +173,8 @@ export async function startBackend(): Promise<BackendStartResponse> {
 
 export async function healthCheck(): Promise<boolean> {
   try {
-    await fetch(`${API_BASE}/api/health`, { signal: AbortSignal.timeout(3000) });
-    return true;
+    const response = await fetch(`${API_BASE}/api/health`, { signal: AbortSignal.timeout(3000) });
+    return response.ok;
   } catch {
     return false;
   }
@@ -218,9 +219,11 @@ export function getThumbnailUrl(videoId: string, time: number = 5.0): string {
   return `${API_BASE}/api/videos/${videoId}/thumbnail?time=${time}`;
 }
 
-export async function analyzeVideo(videoId: string): Promise<{ job_id: string }> {
+export async function analyzeVideo(videoId: string, transcribe = false): Promise<{ job_id: string }> {
   return request<{ job_id: string }>(`/api/videos/${videoId}/analyze`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skip_transcription: !transcribe }),
   });
 }
 
@@ -233,7 +236,7 @@ export async function createPlan(
   instruction: string,
   options: CreatePlanOptions = {}
 ): Promise<EditPlan> {
-  const { useLlm = true, stylePreset = null } = options;
+  const { useLlm = false, stylePreset = null } = options;
 
   return request<EditPlan>('/api/plan', {
     method: 'POST',
@@ -260,7 +263,8 @@ export async function startRender(
       video_id: videoId,
       plan,
       render_preset: renderPreset,
-      subtitle_export_mode: subtitleExportMode,
+      subtitle_export_mode: plan.operations.some((operation) => operation.type === 'subtitle')
+        ? subtitleExportMode : 'burned',
     }),
   });
 }

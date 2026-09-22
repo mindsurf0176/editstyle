@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Send, Scissors, Subtitles, Clapperboard, Wand2, X } from 'lucide-react';
 import { useApp } from '../store';
 import { createPlan } from '../api';
@@ -13,6 +13,8 @@ export default function InstructionBar() {
   const { state, dispatch } = useApp();
   const [instruction, setInstruction] = useState('');
   const [loading, setLoading] = useState(false);
+  const revisionRef = useRef(state.editRevision);
+  revisionRef.current = state.editRevision;
 
   const disabled = !state.videoId;
   const isRefiningPlan = !!state.editPlan;
@@ -20,17 +22,20 @@ export default function InstructionBar() {
 
   const handleSubmit = async (text?: string) => {
     const finalInstruction = text || instruction;
-    if (!finalInstruction.trim() || !state.videoId) return;
+    if (!finalInstruction.trim() || !state.videoId || loading) return;
 
     setLoading(true);
     try {
       const plan = await createPlan(
         state.videoId,
         finalInstruction,
-        state.editPlan ?? undefined,
-        selectedStylePreset?.id
+        { stylePreset: selectedStylePreset?.file ?? selectedStylePreset?.name }
       );
-      dispatch({ type: 'SET_EDIT_PLAN', plan });
+      if (revisionRef.current !== state.editRevision) throw new Error('The edit changed while planning. Send the instruction again.');
+      if (plan.operations.some((operation) => operation.type === 'subtitle') && !state.analysis?.transcript.length) {
+        throw new Error('Subtitles need a transcript. Enable speech transcription and import the video again.');
+      }
+      dispatch({ type: 'APPLY_PLAN_PROPOSAL', plan, revision: state.editRevision });
       dispatch({ type: 'SET_SIDEBAR_TAB', tab: 'edit' });
       dispatch({ type: 'SET_VIEW', view: 'editor' });
       if (!text) setInstruction('');
@@ -60,8 +65,8 @@ export default function InstructionBar() {
       {selectedStylePreset && state.videoId && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
           <Wand2 size={12} className="text-accent" />
-          <span className="text-xs font-medium text-accent flex-1">Style: {selectedStylePreset.name}</span>
-          <button onClick={() => dispatch({ type: 'SET_PLANNING_STYLE_PRESET', preset: null })} className="text-accent hover:text-text-primary transition-colors">
+          <span className="text-xs font-medium text-accent flex-1">Style context: {selectedStylePreset.name}</span>
+          <button aria-label="Clear style context" onClick={() => dispatch({ type: 'SET_PLANNING_STYLE_PRESET', preset: null })} className="text-accent hover:text-text-primary transition-colors">
             <X size={12} />
           </button>
         </div>

@@ -25,11 +25,36 @@ from cutai.models.types import (
     EditPlan,
     SpeedOperation,
     SubtitleOperation,
+    TranscriptSegment,
     TransitionOperation,
     VideoAnalysis,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def validate_render_plan(plan: EditPlan, analysis: VideoAnalysis) -> None:
+    """Reject combinations whose source timestamps cannot yet be rendered correctly."""
+    cuts = [op for op in plan.operations if isinstance(op, CutOperation)]
+    speeds = [op for op in plan.operations if isinstance(op, SpeedOperation)]
+    subtitles = any(isinstance(op, SubtitleOperation) for op in plan.operations)
+    transitions = any(
+        isinstance(op, TransitionOperation) and op.style != "cut" for op in plan.operations
+    )
+    if subtitles and not analysis.transcript:
+        raise ValueError("Subtitles require a transcript. Analyze with transcription first.")
+    if speeds and (cuts or subtitles or transitions or len(speeds) > 1):
+        raise ValueError(
+            "Speed changes cannot yet be combined with cuts, subtitles, transitions, "
+            "or another speed change. Render the speed change separately first."
+        )
+    if subtitles and transitions:
+        raise ValueError(
+            "Subtitles and transitions cannot yet be combined because transitions change "
+            "subtitle timing. Render these edits separately."
+        )
+    if cuts and not _kept_timeline(cuts, analysis.duration):
+        raise ValueError("The cut plan removes the entire video. Keep at least one segment.")
 
 
 def render(
@@ -62,6 +87,8 @@ def render(
     Returns:
         Path to the rendered output video.
     """
+    validate_render_plan(plan, analysis)
+
     # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -164,7 +191,7 @@ def render(
             transcript = analysis.transcript
             if cut_ops:
                 transcript = _adjust_transcript_for_cuts(
-                    analysis.transcript, cut_ops,
+                    analysis.transcript, cut_ops, analysis.duration,
                 )
 
             if burn_subtitles:
@@ -202,7 +229,8 @@ def render(
                     step_num, total_steps, len(trans_ops),
                 )
                 current_video = apply_transitions(
-                    current_video, trans_ops, cut_points, trans_output,
+                    current_video, _remap_transitions(analysis, cut_ops, trans_ops),
+                    cut_points, trans_output,
                 )
             else:
                 logger.info("Transitions: skipped (no cut points)")
@@ -217,104 +245,82 @@ def render(
     return output_path
 
 
+def _kept_timeline(
+    cut_ops: list[CutOperation], duration: float,
+) -> list[tuple[float, float, float]]:
+    """Return (source start, source end, output start) using the cutter's ranges."""
+    from cutai.editor.cutter import _compute_keep_ranges
+
+    timeline: list[tuple[float, float, float]] = []
+    output_start = 0.0
+    for start, end in _compute_keep_ranges(cut_ops, duration):
+        if end <= start:
+            continue
+        timeline.append((start, end, output_start))
+        output_start += end - start
+    return timeline
+
+
+def _retained_scene_spans(
+    analysis: VideoAnalysis, cut_ops: list[CutOperation],
+) -> list[tuple[int, float]]:
+    """Map retained source scene IDs to the end of each output segment."""
+    spans: list[tuple[int, float]] = []
+    for keep_start, keep_end, output_start in _kept_timeline(cut_ops, analysis.duration):
+        for scene in analysis.scenes:
+            start = max(scene.start_time, keep_start)
+            end = min(scene.end_time, keep_end)
+            if end > start:
+                spans.append((scene.id, round(output_start + end - keep_start, 3)))
+    return spans
+
+
 def _compute_cut_points(
+    analysis: VideoAnalysis, cut_ops: list[CutOperation],
+) -> list[float]:
+    """Return retained scene boundaries and joins between disjoint kept ranges."""
+    return [end for _, end in _retained_scene_spans(analysis, cut_ops)[:-1]]
+
+
+def _remap_transitions(
     analysis: VideoAnalysis,
     cut_ops: list[CutOperation],
-) -> list[float]:
-    """Compute scene boundary timestamps in the edited video.
-
-    Takes the original scene boundaries and adjusts them for
-    any removed segments.
-    """
-    if len(analysis.scenes) < 2:
-        return []
-
-    # Original scene boundaries (end of each scene except last)
-    boundaries = [scene.end_time for scene in analysis.scenes[:-1]]
-
-    if not cut_ops:
-        return boundaries
-
-    # Compute cumulative removed time before each boundary
-    removes = sorted(
-        [(op.start_time, op.end_time) for op in cut_ops if op.action == "remove"],
-        key=lambda x: x[0],
-    )
-
-    adjusted: list[float] = []
-    for boundary in boundaries:
-        shift = 0.0
-        removed = False
-        for r_start, r_end in removes:
-            if r_end <= boundary:
-                shift += r_end - r_start
-            elif r_start < boundary < r_end:
-                # Boundary falls inside a removed range — skip it
-                removed = True
-                break
-        if not removed:
-            adjusted_boundary = boundary - shift
-            if adjusted_boundary > 0:
-                adjusted.append(round(adjusted_boundary, 3))
-
-    return adjusted
+    transitions: list[TransitionOperation],
+) -> list[TransitionOperation]:
+    """Translate source scene IDs into adjacent segment indices after cutting."""
+    scene_ids = [scene_id for scene_id, _ in _retained_scene_spans(analysis, cut_ops)]
+    mapped: list[TransitionOperation] = []
+    for index, pair in enumerate(zip(scene_ids, scene_ids[1:], strict=False)):
+        for transition in transitions:
+            if transition.between == pair:
+                mapped.append(transition.model_copy(update={"between": (index, index + 1)}))
+    return mapped
 
 
 def _adjust_transcript_for_cuts(
-    transcript: list,
+    transcript: list[TranscriptSegment],
     cut_ops: list[CutOperation],
-) -> list:
-    """Adjust transcript timestamps after cut operations.
-
-    When segments are removed, subsequent transcript times need to shift.
-    Handles partial overlaps by clamping segment boundaries to kept ranges.
-    """
-    from cutai.models.types import TranscriptSegment
-
-    # Get sorted remove ranges
-    removes = sorted(
-        [(op.start_time, op.end_time) for op in cut_ops if op.action == "remove"],
-        key=lambda x: x[0],
-    )
-
-    if not removes:
+    duration: float | None = None,
+) -> list[TranscriptSegment]:
+    """Clip captions to every kept interval and map them onto the edited timeline."""
+    if not cut_ops:
         return transcript
-
-    adjusted: list[TranscriptSegment] = []
-
-    for seg in transcript:
-        seg_start = seg.start_time
-        seg_end = seg.end_time
-
-        kept_start = seg_start
-        kept_end = seg_end
-
-        for r_start, r_end in removes:
-            if r_start <= seg_start and r_end >= seg_end:
-                kept_start = kept_end
-                break
-            if r_start <= kept_start < r_end:
-                kept_start = r_end
-            if r_start < kept_end <= r_end:
-                kept_end = r_start
-
-        if kept_end - kept_start < 0.05:
-            continue
-
-        shift = 0.0
-        for r_start, r_end in removes:
-            if r_end <= kept_start:
-                shift += r_end - r_start
-            elif r_start < kept_start:
-                shift += kept_start - r_start
-
-        adjusted.append(
-            TranscriptSegment(
-                start_time=round(max(0.0, kept_start - shift), 3),
-                end_time=round(max(0.0, kept_end - shift), 3),
-                text=seg.text,
-                confidence=seg.confidence,
-            )
+    if duration is None:
+        duration = max(
+            [seg.end_time for seg in transcript] + [op.end_time for op in cut_ops],
+            default=0.0,
         )
-
+    adjusted: list[TranscriptSegment] = []
+    for keep_start, keep_end, output_start in _kept_timeline(cut_ops, duration):
+        for segment in transcript:
+            start = max(segment.start_time, keep_start)
+            end = min(segment.end_time, keep_end)
+            if end - start < 0.05:
+                continue
+            adjusted.append(
+                segment.model_copy(update={
+                    "start_time": round(output_start + start - keep_start, 3),
+                    "end_time": round(output_start + end - keep_start, 3),
+                })
+            )
     return adjusted

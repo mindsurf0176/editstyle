@@ -52,6 +52,8 @@ function createState(overrides: Partial<AppState> = {}): AppState {
     backendOnline: true,
     videoId: videoInfo.video_id,
     videoInfo,
+    analysis: { file_path: '/tmp/clip.mp4', duration: 42, fps: 30, width: 1920, height: 1080,
+      scenes: [], transcript: [], quality: { silent_segments: [], audio_energy: [], overall_silence_ratio: 0 } },
     view: 'editor',
     sidebarTab: 'style',
     ...overrides,

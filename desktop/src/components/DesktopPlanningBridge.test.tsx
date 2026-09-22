@@ -160,7 +160,7 @@ describe('desktop planning bridge integration', () => {
 
     expect(createPlanMock).toHaveBeenCalledWith(
       'video-1',
-      'Remove silence and keep subtitles\n\nAdditional refinement: make pacing faster',
+      'make pacing faster',
       { stylePreset: 'cinematic.yaml' }
     );
   });

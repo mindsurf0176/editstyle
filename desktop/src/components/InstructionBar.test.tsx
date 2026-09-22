@@ -89,7 +89,7 @@ describe('InstructionBar planning bridge', () => {
     container?.remove();
   });
 
-  it('composes refinements with the current plan instruction and current style preset', async () => {
+  it('plans only the new command so existing manual edits can be preserved', async () => {
     const dispatchedActions: AppAction[] = [];
     const nextPlan: EditPlan = {
       instruction: 'Remove silence and keep subtitles\n\nAdditional refinement: make pacing faster',
@@ -153,10 +153,10 @@ describe('InstructionBar planning bridge', () => {
 
     expect(createPlanMock).toHaveBeenCalledWith(
       'video-1',
-      'Remove silence and keep subtitles\n\nAdditional refinement: make pacing faster',
+      'make pacing faster',
       { stylePreset: 'cinematic.yaml' }
     );
-    expect(dispatchedActions).toContainEqual({ type: 'SET_EDIT_PLAN', plan: nextPlan });
+    expect(dispatchedActions).toContainEqual({ type: 'APPLY_PLAN_PROPOSAL', plan: nextPlan, revision: 0 });
     expect(dispatchedActions).toContainEqual({ type: 'SET_SIDEBAR_TAB', tab: 'edit' });
     expect(dispatchedActions).toContainEqual({ type: 'SET_VIEW', view: 'editor' });
   });
@@ -195,16 +195,16 @@ describe('InstructionBar planning bridge', () => {
       root.render(<Harness />);
     });
 
-    expect(container.textContent).toContain('Planning with cinematic');
+    expect(container.textContent).toContain('Style context: cinematic');
 
     await act(async () => {
-      getButtonByLabel(container, 'Clear planning style').click();
+      getButtonByLabel(container, 'Clear style context').click();
     });
 
     expect(dispatchedActions).toContainEqual({
       type: 'SET_PLANNING_STYLE_PRESET',
       preset: null,
     });
-    expect(container.textContent).not.toContain('Planning with cinematic');
+    expect(container.textContent).not.toContain('Style context: cinematic');
   });
 });

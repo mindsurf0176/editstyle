@@ -67,6 +67,8 @@ function createState(overrides: Partial<AppState> = {}): AppState {
     backendOnline: true,
     videoId: videoInfo.video_id,
     videoInfo,
+    analysis: { file_path: '/tmp/clip.mp4', duration: 42, fps: 30, width: 1920, height: 1080,
+      scenes: [], transcript: [], quality: { silent_segments: [], audio_energy: [], overall_silence_ratio: 0 } },
     view: 'editor',
     sidebarTab: 'style',
     ...overrides,
@@ -180,7 +182,6 @@ describe('AppMainContent desktop style flow', () => {
     expect(applyStyleMock).toHaveBeenCalledWith('video-1', { ...preset, style: { contrast: 1.1 } });
     expect(container.querySelector('[data-testid="edit-plan-panel"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Use for planning');
-    expect(container.textContent).toContain('Planning with cinematic');
     expect(container.textContent).toContain('Style context: cinematic');
   });
 
@@ -223,7 +224,7 @@ describe('AppMainContent desktop style flow', () => {
 
     expect(getPresetsMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('Preset list unavailable');
-    expect(container.textContent).not.toContain('cinematic');
+    expect(container.querySelector('[aria-label="Editing tools"]')?.textContent).not.toContain('cinematic');
 
     await act(async () => {
       getButtonByLabel(container, 'Show highlights').click();

@@ -1,6 +1,7 @@
-import { Film, Play, Download } from 'lucide-react';
+import { Film } from 'lucide-react';
 import { useApp } from '../store';
 import VideoPreview from './VideoPreview';
+import EditorTimeline from './EditorTimeline';
 
 export default function CanvasPanel() {
   const { state } = useApp();
@@ -14,6 +15,8 @@ export default function CanvasPanel() {
           <div className="flex-1 flex items-center justify-center bg-black min-h-0 relative">
             <VideoPreview />
           </div>
+
+          <EditorTimeline />
 
           {/* Bottom bar: video info */}
           <div className="h-10 flex items-center justify-between px-4 bg-bg-panel border-t border-border flex-shrink-0">

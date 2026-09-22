@@ -1,4 +1,10 @@
-# editstyle
+# CutAI 복구 브랜치 · editstyle
+
+이 브랜치(`revival/cutai-editor`)는 기존 **CutAI 독립 데스크톱 편집기**를 복구합니다.
+editstyle의 스킬·스타일 문서 방향은 그대로 유지하며, `revival/editing-style`에서 별도로 진행합니다.
+CutAI 실행과 확인 범위는 [복구 안내](docs/CUTAI_RESTORATION.md)를 참고하세요.
+
+## editstyle
 
 **편집 스타일은 editstyle에, 편집은 쓰던 도구에서.** 이전 이름은 CutAI입니다.
 
@@ -74,7 +80,8 @@ MCP는 목록·키워드 검색·원문 조회·문서 읽기만 제공합니다
 
 기존 [BYOK 보조앱](docs/COMPANION.md)과 [Premiere·Resolve 내부 확장](docs/PLUGINS.md)은
 실험용으로 보존했습니다. 현재 주력 경로의 필수 구성요소가 아닙니다.
-`cutai/`와 `desktop/`의 이전 독립 편집기는 [역사 문서](docs/LEGACY_CUTAI.md)에 남겼습니다.
+`cutai/`와 `desktop/`의 독립 편집기는 이 브랜치에서 [복구 중](docs/CUTAI_RESTORATION.md)이며,
+이전 설명은 [역사 문서](docs/LEGACY_CUTAI.md)에 남겼습니다.
 [제품 방향](docs/PRODUCT_DIRECTION.md)을 참고하세요.
 
 ## 개발과 스킬 패키징

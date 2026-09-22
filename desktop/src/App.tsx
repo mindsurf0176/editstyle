@@ -16,6 +16,9 @@ import {
 import ChatPanel from './components/ChatPanel';
 import CanvasPanel from './components/CanvasPanel';
 import JobProgress from './components/JobProgress';
+import EditPlanPanel from './components/EditPlanPanel';
+import StylePanel from './components/StylePanel';
+import HighlightsPanel from './components/HighlightsPanel';
 
 interface AppMainContentProps {
   onRetryBackend: () => void;
@@ -23,7 +26,7 @@ interface AppMainContentProps {
 }
 
 export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainContentProps) {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
 
   return (
     <div className="flex flex-1 h-full min-h-0">
@@ -32,6 +35,22 @@ export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainConte
 
       {/* Right: Video Canvas */}
       <CanvasPanel />
+      {state.videoId ? (
+        <aside className="w-80 flex-shrink-0 border-l border-border bg-bg-panel flex flex-col min-h-0" aria-label="Editing tools">
+          <nav className="flex border-b border-border p-2 gap-2" aria-label="Editing panels">
+            {(['edit', 'style', 'highlights'] as const).map((tab) => (
+              <button key={tab} type="button" aria-pressed={state.sidebarTab === tab}
+                onClick={() => dispatch({ type: 'SET_SIDEBAR_TAB', tab })}
+                className="px-2 py-1 text-xs capitalize text-text-secondary aria-pressed:text-accent">{tab}</button>
+            ))}
+          </nav>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {state.sidebarTab === 'style' ? <StylePanel /> : state.sidebarTab === 'highlights' ? <HighlightsPanel />
+              : state.editPlan ? <EditPlanPanel />
+              : <p className="p-4 text-xs text-text-muted">Choose a source range below the canvas, or enter an editing instruction.</p>}
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }

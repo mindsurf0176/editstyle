@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "backend:bundle": "./scripts/build-desktop-backend.sh",
-    "build": "tsc && vite build",
-    "test": "vitest run",
+    "build": "tsc -b && vite build",
+    "test": "vitest run --environment jsdom",
     "preview": "vite preview",
     "tauri": "tauri",
     "release:macos:build": "./scripts/release-macos-build.sh",

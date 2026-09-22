@@ -35,7 +35,7 @@ export default function DropZone() {
         });
         const videoInfo = await getVideoInfo(video_id);
         dispatch({ type: 'SET_VIDEO', videoId: video_id, videoInfo });
-        const { job_id } = await analyzeVideo(video_id);
+        const { job_id } = await analyzeVideo(video_id, state.transcribeOnImport);
         dispatch({
           type: 'SET_ACTIVE_JOB',
           job: { job_id, type: 'analysis', status: 'running', progress: 0 },
@@ -48,7 +48,7 @@ export default function DropZone() {
         setUploading(false);
       }
     },
-    [dispatch]
+    [dispatch, state.transcribeOnImport]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);

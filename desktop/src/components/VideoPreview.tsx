@@ -116,6 +116,8 @@ export default function VideoPreview() {
   const renderVideoRef = useRef<HTMLVideoElement | null>(null);
   const syncSourceRef = useRef<'preview' | 'render' | null>(null);
   const lastSyncedTimeRef = useRef<number | null>(null);
+  const currentRevisionRef = useRef(state.editRevision);
+  currentRevisionRef.current = state.editRevision;
 
   useEffect(() => {
     setDisplayMode((current) => {
@@ -395,6 +397,8 @@ export default function VideoPreview() {
   }
 
   async function handleRecentOutputRerun(item: OutputHistoryItem) {
+    if (activeJob?.status === 'pending' || activeJob?.status === 'running' || rerunStarting) return;
+    const revision = state.editRevision;
     const issue = getRecentOutputRerunIssue(item);
     if (issue) {
       setRecentOutputMessage(issue);
@@ -415,9 +419,11 @@ export default function VideoPreview() {
         dispatch({ type: 'SET_PREVIEW_RESOLUTION', resolution: effectiveResolution });
 
         const { job_id } = await startPreview(videoId, editPlan, effectiveResolution);
+        if (currentRevisionRef.current !== revision) throw new Error('The edit changed. Start a new preview.');
         dispatch({ type: 'SET_PREVIEW_RESULT', preview: null });
         dispatch({
           type: 'SET_ACTIVE_JOB',
+          revision,
           job: { job_id, type: 'preview', status: 'running', progress: 0 },
         });
         dispatch({ type: 'SET_VIEW', view: 'editor' });
@@ -441,9 +447,11 @@ export default function VideoPreview() {
         effectivePreset,
         effectiveSubtitleExportMode
       );
+      if (currentRevisionRef.current !== revision) throw new Error('The edit changed. Start a new render.');
       dispatch({ type: 'SET_RENDER_RESULT', render: null });
       dispatch({
         type: 'SET_ACTIVE_JOB',
+        revision,
         job: { job_id, type: 'render', status: 'running', progress: 0 },
       });
       dispatch({ type: 'SET_VIEW', view: 'rendering' });
@@ -569,7 +577,7 @@ export default function VideoPreview() {
         {nativeDesktop ? (
           <button
             onClick={() => void handleExport(mode)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white hover:bg-[#e4e4e7] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] hover:bg-[#e4e4e7] transition-colors"
           >
             <Download size={13} />
             {mode === 'render' ? 'Export render' : 'Save preview as'}
@@ -579,7 +587,7 @@ export default function VideoPreview() {
             href={downloadUrl ?? undefined}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white hover:bg-[#e4e4e7] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] hover:bg-[#e4e4e7] transition-colors"
           >
             <Download size={13} />
             {`Download ${mode}`}
@@ -655,7 +663,7 @@ export default function VideoPreview() {
                 onClick={() => selectDisplayMode('source')}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                   displayMode === 'source' && !compareEnabled
-                    ? 'bg-[#ffffff] text-white'
+                    ? 'bg-[#ffffff] text-[#111315]'
                     : 'text-[#a1a1aa] hover:text-[#fafafa]'
                 }`}
               >
@@ -667,7 +675,7 @@ export default function VideoPreview() {
                   onClick={() => selectDisplayMode('preview')}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     displayMode === 'preview' && !compareEnabled
-                      ? 'bg-[#ffffff] text-white'
+                      ? 'bg-[#ffffff] text-[#111315]'
                       : 'text-[#a1a1aa] hover:text-[#fafafa]'
                   }`}
                 >
@@ -680,7 +688,7 @@ export default function VideoPreview() {
                   onClick={() => selectDisplayMode('render')}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     displayMode === 'render' && !compareEnabled
-                      ? 'bg-[#ffffff] text-white'
+                      ? 'bg-[#ffffff] text-[#111315]'
                       : 'text-[#a1a1aa] hover:text-[#fafafa]'
                   }`}
                 >
@@ -695,7 +703,7 @@ export default function VideoPreview() {
                   onClick={() => setCompareMode('off')}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     !compareEnabled
-                      ? 'bg-[#ffffff] text-white'
+                      ? 'bg-[#ffffff] text-[#111315]'
                       : 'text-[#a1a1aa] hover:text-[#fafafa]'
                   }`}
                 >
@@ -708,7 +716,7 @@ export default function VideoPreview() {
                     onClick={() => setCompareMode(option.value)}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                       compareMode === option.value
-                        ? 'bg-[#ffffff] text-white'
+                        ? 'bg-[#ffffff] text-[#111315]'
                         : 'text-[#a1a1aa] hover:text-[#fafafa]'
                     }`}
                   >
@@ -739,7 +747,7 @@ export default function VideoPreview() {
                   {nativeDesktop ? (
                     <button
                       onClick={() => void handleExport(currentMediaKind)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white hover:bg-[#e4e4e7] transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] hover:bg-[#e4e4e7] transition-colors"
                     >
                       <Download size={13} />
                       {displayMode === 'render' ? 'Export render' : 'Save preview as'}
@@ -749,7 +757,7 @@ export default function VideoPreview() {
                       href={currentDownloadUrl ?? undefined}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white hover:bg-[#e4e4e7] transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] hover:bg-[#e4e4e7] transition-colors"
                     >
                       <Download size={13} />
                       Download
@@ -955,7 +963,7 @@ export default function VideoPreview() {
               <button
                 type="button"
                 onClick={() => void handleRecentOutputExport(selectedRecentOutput)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#e4e4e7]"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffffff] px-3 py-2 text-xs font-medium text-[#111315] transition-colors hover:bg-[#e4e4e7]"
               >
                 <Download size={13} />
                 {nativeDesktop ? 'Export selected' : 'Download selected'}
