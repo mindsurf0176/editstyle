@@ -1,14 +1,17 @@
 prune tests
 include tests/test_style_bridge.py
+include tests/test_skill_bundle.py
 include tests/test_companion.py
 include tests/test_host_bridge.py
 include tests/test_premiere.cjs
 recursive-include plugins *.js *.css *.html *.json *.py
 include scripts/build-plugins.py
+include scripts/build-skill.py
 include scripts/qa-plugin-panel.cjs
 include docs/PLUGINS.md
 recursive-include skills/editstyle *.md
 include docs/STYLE_REBOOT.md
+include docs/SKILL_QA.md
 include docs/PRODUCT_DIRECTION.md
 include docs/COMPANION.md
 include DESIGN.md

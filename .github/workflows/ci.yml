@@ -22,9 +22,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
           pip install -e ".[app,mcp,dev]"
       - name: Lint
-        run: ruff check editstyle/ plugins/resolve tests/test_style_bridge.py tests/test_companion.py tests/test_host_bridge.py scripts/build-plugins.py
+        run: ruff check editstyle/ plugins/resolve tests/test_style_bridge.py tests/test_skill_bundle.py tests/test_companion.py tests/test_host_bridge.py scripts/build-plugins.py scripts/build-skill.py
       - name: Test style API and real stdio MCP
         run: python -m unittest discover -s tests -p test_style_bridge.py -v
+      - name: Test and build the portable skill bundle
+        run: |
+          python -m unittest discover -s tests -p test_skill_bundle.py -v
+          python scripts/build-skill.py
       - name: Test companion and real media interchange
         run: python -m unittest discover -s tests -p test_companion.py -v
       - name: Test native host bridge and source-media interchange
@@ -38,6 +42,13 @@ jobs:
           python scripts/build-plugins.py
       - name: Build installable package
         run: python -m build
+      - name: Test skill distribution from extracted source archive
+        run: |
+          source_dir=$(mktemp -d)
+          tar -xzf dist/editstyle-*.tar.gz -C "$source_dir" --strip-components=1
+          cd "$source_dir"
+          python -S scripts/build-skill.py
+          python -S -m unittest discover -s tests -p test_skill_bundle.py -v
       - name: Test wheel outside the checkout
         run: |
           python -m venv /tmp/editstyle-wheel

@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 PRESETS = Path(__file__).resolve().parent / "presets"
 SECTIONS = ("Rhythm", "Transitions", "Visual", "Audio", "Subtitles", "Patterns", "Rules")
+MAX_SEARCH_LENGTH = 200
 
 
 def read_style(markdown: str) -> dict:
@@ -73,12 +75,36 @@ def list_styles() -> list[dict]:
     ]
 
 
+def search_styles(query: str) -> list[dict]:
+    """Match every whitespace-separated term against preset ID, name and Markdown.
+
+    Matching uses Unicode casefold and literal substrings, not semantic search.
+    Queries must contain 1–200 characters and at least one non-whitespace term.
+    """
+    if not isinstance(query, str):
+        raise ValueError("Search query must be a string")
+    if not query.strip():
+        raise ValueError("Search query must contain at least one term")
+    if len(query) > MAX_SEARCH_LENGTH:
+        raise ValueError(f"Search query exceeds {MAX_SEARCH_LENGTH} characters")
+    if any(not char.isprintable() and not char.isspace() for char in query):
+        raise ValueError("Search query contains unsupported control characters")
+    terms = query.casefold().split()
+    results = []
+    for path in sorted(PRESETS.glob("*.md")):
+        style = read_style(path.read_text(encoding="utf-8"))
+        text = f"{path.stem}\n{style['name']}\n{style['markdown']}".casefold()
+        if all(term in text for term in terms):
+            results.append({"id": path.stem, "name": style["name"]})
+    return results
+
+
 def get_style(style_id: str) -> dict:
     # Resolve only catalog IDs, never caller-controlled filesystem paths.
     catalog = {item["id"] for item in list_styles()}
     if style_id not in catalog:
         raise ValueError(f"Unknown style: {style_id}. Available: {', '.join(sorted(catalog))}")
-    result = read_style((PRESETS / f"{style_id}.md").read_text(encoding="utf-8"))
+    result = read_style((PRESETS / f"{style_id}.md").read_bytes().decode("utf-8"))
     result["id"] = style_id
     result["provenance"] = "Legacy CutAI authored preset; not extracted from a reference video"
     return result
@@ -88,20 +114,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="editstyle portable editing styles (no rendering)")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list")
+    search = commands.add_parser("search", help="Find presets containing every query term")
+    search.add_argument("query")
     get = commands.add_parser("get")
     get.add_argument("style_id")
+    get.add_argument("--markdown", action="store_true", help="Print the exact original Markdown")
     read = commands.add_parser("read")
     read.add_argument("file", type=Path)
     args = parser.parse_args()
     try:
         if args.command == "list":
             result = list_styles()
+        elif args.command == "search":
+            result = search_styles(args.query)
         elif args.command == "get":
             result = get_style(args.style_id)
         else:
             result = read_style(args.file.read_text(encoding="utf-8"))
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
+    if args.command == "get" and args.markdown:
+        sys.stdout.buffer.write(result["markdown"].encode("utf-8"))
+        return
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

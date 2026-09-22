@@ -1,6 +1,7 @@
 # Portable editing style
 
-Retain the existing CutAI v1 header and section names for compatibility. Numeric
+Use `> EDITSTYLE v1` for new documents; accept the legacy `> CutAI EDITSTYLE v1`
+marker when reading existing documents. Retain existing section names. Numeric
 fields are optional. The legacy parser substitutes defaults for missing fields;
 the new style bridge preserves omissions. Never pass an incomplete profile through
 the legacy parser and present its defaults as observations.
