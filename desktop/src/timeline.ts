@@ -33,6 +33,9 @@ function subtractRange(ranges: SourceRange[], removed: SourceRange): SourceRange
 }
 
 export function getKeepRanges(operations: EditOperation[], duration: number): SourceRange[] {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('Source duration must be finite and greater than zero.');
+  }
   const cuts = operations.filter((operation) => operation.type === 'cut');
   const ranges = cuts.map((operation) => {
     const { start_time, end_time, action } = operation;
@@ -44,13 +47,10 @@ export function getKeepRanges(operations: EditOperation[], duration: number): So
     }
     return { start_time, end_time, action };
   });
-  const removes = ranges.filter((range) => range.action === 'remove');
-  // Match the engine's source-time contract; manual edits are normalized to keeps.
-  if (removes.length > 0) {
-    return removes.reduce(subtractRange, [{ start_time: 0, end_time: duration }]);
-  }
   const keeps = ranges.filter((range) => range.action === 'keep');
-  return keeps.length > 0 ? mergeRanges(keeps) : [{ start_time: 0, end_time: duration }];
+  const base = keeps.length > 0 ? mergeRanges(keeps) : [{ start_time: 0, end_time: duration }];
+  const removes = mergeRanges(ranges.filter((range) => range.action === 'remove'));
+  return removes.reduce(subtractRange, base).map(({ start_time, end_time }) => ({ start_time, end_time }));
 }
 
 function intersectRanges(ranges: SourceRange[], selection: SourceRange[]): SourceRange[] {
@@ -93,7 +93,11 @@ export function editSourceRange(
 }
 
 export function appendPlan(current: EditPlan | null, incoming: EditPlan, duration: number): EditPlan {
-  if (!current) return incoming;
+  const incomingRanges = getKeepRanges(incoming.operations, duration);
+  if (!current) {
+    if (incomingRanges.length === 0) throw new Error('This edit would remove the whole video. Keep at least one range.');
+    return incoming;
+  }
   // An empty proposal means no rule matched, so the existing plan stays as-is.
   if (incoming.operations.length === 0) return current;
   const replacedTypes = new Set(incoming.operations
@@ -109,6 +113,6 @@ export function appendPlan(current: EditPlan | null, incoming: EditPlan, duratio
   if (!incoming.operations.some((operation) => operation.type === 'cut')) {
     return { ...plan, estimated_duration: current.estimated_duration };
   }
-  const ranges = intersectRanges(getKeepRanges(current.operations, duration), getKeepRanges(incoming.operations, duration));
+  const ranges = intersectRanges(getKeepRanges(current.operations, duration), incomingRanges);
   return withKeepRanges(plan, ranges, 'Combined source cuts');
 }

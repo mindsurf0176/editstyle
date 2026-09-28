@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, CheckCircle, XCircle, X, Download, ExternalLink } from 'lucide-react';
 import * as Progress from '@radix-ui/react-progress';
 import { useApp } from '../store';
 import {
+  ApiError,
   connectProgressWs,
   exportBundleOrUrl,
   getAnalysis,
@@ -44,6 +45,11 @@ function looksLikeMediaResult(result: Job['result']): result is MediaJobResult {
   return Boolean(result && typeof result === 'object' && 'output_path' in result);
 }
 
+function interruptedJob(job: Job): Job {
+  return { ...job, status: 'failed', result: undefined,
+    error: 'This job is no longer available. The backend may have restarted. Your edits are preserved; start this job again when ready.' };
+}
+
 function buildRecentOutputItem(
   kind: 'preview' | 'render',
   job: Job,
@@ -69,8 +75,6 @@ function buildRecentOutputItem(
 export default function JobProgress() {
   const { state, dispatch } = useApp();
   const { activeJob } = state;
-  const wsRef = useRef<WebSocket | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [exportFeedback, setExportFeedback] = useState<{
     jobId: string;
     savedPath: string;
@@ -82,23 +86,46 @@ export default function JobProgress() {
       return;
     }
 
+    let subscribed = true;
+    let terminal = false;
+    let polling = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
     const syncJob = async () => {
+      if (!subscribed || terminal || polling) return;
+      polling = true;
       try {
         const job = await pollJob(activeJob.job_id);
+        if (!subscribed || terminal || job.job_id !== activeJob.job_id) return;
+        terminal = job.status === 'completed' || job.status === 'failed';
         dispatch({ type: 'SYNC_ACTIVE_JOB', job });
-      } catch {
-        // ignore sync errors
+      } catch (error) {
+        if (subscribed && !terminal && error instanceof ApiError && error.status === 404) {
+          terminal = true;
+          dispatch({ type: 'SYNC_ACTIVE_JOB', job: interruptedJob(activeJob) });
+        }
+        // Network failures and non-404 responses do not prove the job is gone.
+      } finally {
+        polling = false;
+        if (terminal) clearInterval(interval);
       }
     };
 
     const ws = connectProgressWs(
       activeJob.job_id,
       (data) => {
+        if (!subscribed || terminal) return;
+        if (!data || typeof data !== 'object' || 'error' in data
+          || !['pending', 'running', 'completed', 'failed'].includes(data.status)
+          || !Number.isFinite(data.progress) || data.progress < 0 || data.progress > 100) {
+          void syncJob();
+          return;
+        }
         dispatch({
           type: 'UPDATE_JOB_PROGRESS',
           jobId: activeJob.job_id,
           progress: data.progress,
-          status: data.status as 'running' | 'completed' | 'failed',
+          status: data.status as Job['status'],
         });
 
         if (data.status === 'completed' || data.status === 'failed') {
@@ -106,25 +133,16 @@ export default function JobProgress() {
         }
       },
       () => {
-        pollRef.current = setInterval(async () => {
-          try {
-            const job = await pollJob(activeJob.job_id);
-            dispatch({ type: 'SYNC_ACTIVE_JOB', job });
-            if (job.status === 'completed' || job.status === 'failed') {
-              if (pollRef.current) clearInterval(pollRef.current);
-            }
-          } catch {
-            // ignore poll errors
-          }
-        }, 2000);
+        if (!subscribed || terminal || interval !== undefined) return;
+        interval = setInterval(() => { void syncJob(); }, 2000);
+        void syncJob();
       }
     );
 
-    wsRef.current = ws;
-
     return () => {
+      subscribed = false;
+      clearInterval(interval);
       ws.close();
-      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [activeJob?.job_id, activeJob?.status, dispatch]);
 
@@ -135,8 +153,20 @@ export default function JobProgress() {
 
     const handleCompletion = async () => {
       try {
-        const completedJob = activeJob.result ? activeJob : await pollJob(activeJob.job_id);
+        let completedJob = activeJob;
+        if (!activeJob.result) {
+          try {
+            completedJob = await pollJob(activeJob.job_id);
+          } catch (error) {
+            if (isSubscribed && error instanceof ApiError && error.status === 404) {
+              dispatch({ type: 'SYNC_ACTIVE_JOB', job: interruptedJob(activeJob) });
+              return;
+            }
+            throw error;
+          }
+        }
         if (!isSubscribed) return;
+        if (completedJob.job_id !== activeJob.job_id) return;
 
         if (
           !activeJob.result
@@ -146,6 +176,7 @@ export default function JobProgress() {
         ) {
           dispatch({ type: 'SYNC_ACTIVE_JOB', job: completedJob });
         }
+        if (completedJob.status !== 'completed') return;
 
         if (completedJob.type === 'analysis' && state.videoId) {
           const analysisData = looksLikeAnalysisResult(completedJob.result)
@@ -286,7 +317,7 @@ export default function JobProgress() {
           ? 'Generating preview...'
           : 'Processing...',
     completed: hasRenderResult ? 'Render complete' : hasPreviewResult ? 'Preview ready' : 'Done',
-    failed: activeJob.error ?? 'Failed',
+    failed: 'Job failed',
   }[activeJob.status];
 
   const StatusIcon = {
@@ -322,6 +353,9 @@ export default function JobProgress() {
       </div>
 
       <div className="px-4 pb-3 space-y-3">
+        {activeJob.status === 'failed' && activeJob.error ? (
+          <p role="alert" className="text-xs text-text-secondary">{activeJob.error}</p>
+        ) : null}
         <Progress.Root
           className="relative w-full h-1.5 overflow-hidden rounded-full bg-[#000000]"
           value={activeJob.progress}

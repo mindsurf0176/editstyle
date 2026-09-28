@@ -9,7 +9,6 @@ import pytest
 
 from cutai.models.types import (
     EditDNA,
-    EditPlan,
     EngagementReport,
     QualityReport,
     SceneEngagement,
@@ -19,6 +18,21 @@ from cutai.models.types import (
     UserPreferences,
     VideoAnalysis,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_project_storage(monkeypatch, tmp_path):
+    """No server test may read or write the real user's persistent projects."""
+    monkeypatch.setenv("CUTAI_DATA_DIR", str(tmp_path / "cutai-data"))
+    # Existing tests import the module at collection time and use its registries.
+    import sys
+
+    server = sys.modules.get("cutai.server")
+    if server is not None:
+        monkeypatch.setattr(server, "UPLOAD_DIR", tmp_path / "cutai-data" / "media")
+        monkeypatch.setattr(server, "OUTPUT_DIR", tmp_path / "outputs")
+        monkeypatch.setattr(server, "videos", {})
+        monkeypatch.setattr(server, "jobs", {})
 
 
 @pytest.fixture

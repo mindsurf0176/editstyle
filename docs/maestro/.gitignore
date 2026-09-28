@@ -1,0 +1,3 @@
+# Machine-local orchestration pointers and approval bookkeeping.
+.workspace-root
+state/*.design-gate.json

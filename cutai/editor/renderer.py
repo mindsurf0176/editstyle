@@ -14,6 +14,7 @@ This is the main entry point for applying an EditPlan to a video.
 from __future__ import annotations
 
 import logging
+import math
 import shutil
 import tempfile
 from pathlib import Path
@@ -35,8 +36,16 @@ logger = logging.getLogger(__name__)
 
 def validate_render_plan(plan: EditPlan, analysis: VideoAnalysis) -> None:
     """Reject combinations whose source timestamps cannot yet be rendered correctly."""
+    from cutai.editor.cutter import _compute_keep_ranges, _validate_source_range
+
     cuts = [op for op in plan.operations if isinstance(op, CutOperation)]
     speeds = [op for op in plan.operations if isinstance(op, SpeedOperation)]
+    if not _compute_keep_ranges(cuts, analysis.duration):
+        raise ValueError("The cut plan removes the entire video. Keep at least one segment.")
+    for speed in speeds:
+        _validate_source_range(speed.start_time, speed.end_time, analysis.duration, "Speed")
+        if not math.isfinite(speed.factor) or speed.factor <= 0:
+            raise ValueError("Speed factor must be finite and greater than zero.")
     subtitles = any(isinstance(op, SubtitleOperation) for op in plan.operations)
     transitions = any(
         isinstance(op, TransitionOperation) and op.style != "cut" for op in plan.operations
@@ -53,8 +62,6 @@ def validate_render_plan(plan: EditPlan, analysis: VideoAnalysis) -> None:
             "Subtitles and transitions cannot yet be combined because transitions change "
             "subtitle timing. Render these edits separately."
         )
-    if cuts and not _kept_timeline(cuts, analysis.duration):
-        raise ValueError("The cut plan removes the entire video. Keep at least one segment.")
 
 
 def render(
@@ -64,6 +71,8 @@ def render(
     output_path: str,
     burn_subtitles: bool = True,
     bgm_file: str | None = None,
+    *,
+    source_duration: float | None = None,
 ) -> str:
     """Apply an edit plan and render the final video.
 
@@ -83,10 +92,17 @@ def render(
         burn_subtitles: If True (default), burn subtitles into video.
             If False, save .ass file as sidecar next to output instead.
         bgm_file: Optional path to a BGM audio file to use.
+        source_duration: Validated original-source duration when rendering a
+            derived preview proxy whose container duration may differ.
 
     Returns:
         Path to the rendered output video.
     """
+    from cutai.editor.cutter import _validate_output_path
+
+    _validate_output_path(video_path, output_path)
+    if not burn_subtitles and any(isinstance(op, SubtitleOperation) for op in plan.operations):
+        _validate_output_path(video_path, str(Path(output_path).with_suffix(".ass")))
     validate_render_plan(plan, analysis)
 
     # Ensure output directory exists
@@ -124,7 +140,9 @@ def render(
                 "Step %d/%d: Applying %d cut operations...",
                 step_num, total_steps, len(cut_ops),
             )
-            current_video = apply_cuts(current_video, cut_ops, cut_output)
+            current_video = apply_cuts(
+                current_video, cut_ops, cut_output, source_duration=source_duration,
+            )
         else:
             logger.info("Cuts: skipped (none)")
 
@@ -254,8 +272,6 @@ def _kept_timeline(
     timeline: list[tuple[float, float, float]] = []
     output_start = 0.0
     for start, end in _compute_keep_ranges(cut_ops, duration):
-        if end <= start:
-            continue
         timeline.append((start, end, output_start))
         output_start += end - start
     return timeline

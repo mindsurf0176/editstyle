@@ -1,18 +1,9 @@
 import { useReducer, useEffect, useCallback, useState } from 'react';
 import { AlertCircle, X } from 'lucide-react';
 import { AppContext, appReducer, initialState, useApp } from './store';
-import type { AppState } from './store';
 import { canAutoStartBackend, healthCheck, startBackend } from './api';
-import { initializeAppState, persistPreviewResolution } from './previewResolutionStorage';
-import {
-  initializeRecentOutputHistoryState,
-  persistRecentOutputs,
-} from './recentOutputHistoryStorage';
-import { initializeRenderPresetState, persistRenderPreset } from './renderPresetStorage';
-import {
-  initializeSubtitleExportModeState,
-  persistSubtitleExportMode,
-} from './subtitleExportModeStorage';
+import { ProjectPersistenceContext, useProjectControls, useProjectPersistence } from './useProjectPersistence';
+import ProjectBar from './components/ProjectBar';
 import ChatPanel from './components/ChatPanel';
 import CanvasPanel from './components/CanvasPanel';
 import JobProgress from './components/JobProgress';
@@ -27,14 +18,24 @@ interface AppMainContentProps {
 
 export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainContentProps) {
   const { state, dispatch } = useApp();
+  const project = useProjectControls();
+
+  if (project && !project.ready) return <div className="flex flex-1 items-center justify-center text-sm text-text-secondary">
+    {project.status === 'error' ? 'Project restoration stopped. Retry restore above to keep your saved work safe.'
+      : state.backendOnline ? 'Restoring your project…' : 'Waiting for the local backend…'}
+    {!state.backendOnline ? <button type="button" disabled={retryingBackend} onClick={onRetryBackend}
+      className="ml-3 text-accent">Reconnect backend</button> : null}
+  </div>;
 
   return (
-    <div className="flex flex-1 h-full min-h-0">
+    <div className="flex flex-1 h-full min-h-0" inert={project?.transitioning || project?.recoveryRequired || undefined}>
       {/* Left: Chat Panel */}
       <ChatPanel onRetryBackend={onRetryBackend} retryingBackend={retryingBackend} />
 
       {/* Right: Video Canvas */}
-      <CanvasPanel />
+      {state.mediaStatus === 'missing' ? <div className="flex-1 flex items-center justify-center p-4 text-sm text-text-secondary">
+        {state.videoInfo?.original_name} · Source unavailable
+      </div> : <CanvasPanel />}
       {state.videoId ? (
         <aside className="w-80 flex-shrink-0 border-l border-border bg-bg-panel flex flex-col min-h-0" aria-label="Editing tools">
           <nav className="flex border-b border-border p-2 gap-2" aria-label="Editing panels">
@@ -44,11 +45,11 @@ export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainConte
                 className="px-2 py-1 text-xs capitalize text-text-secondary aria-pressed:text-accent">{tab}</button>
             ))}
           </nav>
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <fieldset disabled={state.mediaStatus === 'missing'} className="flex-1 min-h-0 overflow-y-auto border-0 p-0 m-0">
             {state.sidebarTab === 'style' ? <StylePanel /> : state.sidebarTab === 'highlights' ? <HighlightsPanel />
               : state.editPlan ? <EditPlanPanel />
               : <p className="p-4 text-xs text-text-muted">Choose a source range below the canvas, or enter an editing instruction.</p>}
-          </div>
+          </fieldset>
         </aside>
       ) : null}
     </div>
@@ -56,24 +57,8 @@ export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainConte
 }
 
 export default function App() {
-  const [state, dispatch] = useReducer(
-    appReducer,
-    initialState,
-    (baseState: AppState) =>
-      initializeSubtitleExportModeState(
-        initializeRenderPresetState(
-          initializeRecentOutputHistoryState(
-            initializeAppState(
-              baseState,
-              typeof window === 'undefined' ? undefined : window.localStorage
-            ),
-            typeof window === 'undefined' ? undefined : window.localStorage
-          ),
-          typeof window === 'undefined' ? undefined : window.localStorage
-        ),
-        typeof window === 'undefined' ? undefined : window.localStorage
-      )
-  );
+  const [state, dispatch] = useReducer(appReducer, initialState);
+  const project = useProjectPersistence(state, dispatch);
   const [retryingBackend, setRetryingBackend] = useState(false);
 
   const markBackendOnline = useCallback(() => {
@@ -117,14 +102,11 @@ export default function App() {
     return () => clearInterval(interval);
   }, [markBackendOffline, markBackendOnline, state.backendOnline]);
 
-  useEffect(() => { persistPreviewResolution(typeof window === 'undefined' ? undefined : window.localStorage, state.previewResolution); }, [state.previewResolution]);
-  useEffect(() => { persistRenderPreset(typeof window === 'undefined' ? undefined : window.localStorage, state.renderPreset); }, [state.renderPreset]);
-  useEffect(() => { persistSubtitleExportMode(typeof window === 'undefined' ? undefined : window.localStorage, state.subtitleExportMode); }, [state.subtitleExportMode]);
-  useEffect(() => { persistRecentOutputs(typeof window === 'undefined' ? undefined : window.localStorage, state.recentOutputs); }, [state.recentOutputs]);
-
   return (
     <AppContext.Provider value={{ state, dispatch }}>
+      <ProjectPersistenceContext.Provider value={project}>
       <div className="flex flex-col h-screen w-screen bg-bg-base overflow-hidden">
+        <ProjectBar />
         {/* Error toast */}
         {state.error && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 bg-error/10 border border-error/20 rounded-lg text-error text-xs">
@@ -137,6 +119,7 @@ export default function App() {
         <AppMainContent onRetryBackend={retryBackend} retryingBackend={retryingBackend} />
         <JobProgress />
       </div>
+      </ProjectPersistenceContext.Provider>
     </AppContext.Provider>
   );
 }

@@ -11,6 +11,9 @@ import type {
   RenderPreset,
   SubtitleExportMode,
   MediaJobResult,
+  ProjectSnapshot,
+  ProjectEditingState,
+  RecentProject,
 } from './types';
 
 const API_BASE = 'http://127.0.0.1:18910';
@@ -34,7 +37,7 @@ interface ExportBundleSaveResult {
   savedCompanionPaths: string[];
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'ApiError';
@@ -399,4 +402,34 @@ export function connectProgressWs(
 
 export async function getAnalysis(videoId: string): Promise<VideoAnalysis> {
   return request<VideoAnalysis>(`/api/videos/${videoId}/analysis`);
+}
+
+const projectRequest = { signal: () => AbortSignal.timeout(15000) };
+
+export function getCurrentProject(): Promise<ProjectSnapshot | null> {
+  return request('/api/projects/current', { signal: projectRequest.signal() });
+}
+
+export function getProjects(): Promise<RecentProject[]> {
+  return request('/api/projects', { signal: projectRequest.signal() });
+}
+
+export function getProject(videoId: string): Promise<ProjectSnapshot> {
+  return request(`/api/projects/${encodeURIComponent(videoId)}`, { signal: projectRequest.signal() });
+}
+
+export function openProject(videoId: string): Promise<ProjectSnapshot> {
+  return request(`/api/projects/${encodeURIComponent(videoId)}/open`, {
+    method: 'POST', signal: projectRequest.signal(),
+  });
+}
+
+export function saveProject(
+  videoId: string, expectedRevision: number, state: ProjectEditingState,
+): Promise<ProjectSnapshot> {
+  return request(`/api/projects/${encodeURIComponent(videoId)}`, {
+    method: 'PUT', signal: projectRequest.signal(),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ schema_version: 1, expected_revision: expectedRevision, state }),
+  });
 }

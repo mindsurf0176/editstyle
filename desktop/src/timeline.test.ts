@@ -1,6 +1,64 @@
 import { describe, expect, it } from 'vitest';
-import { appendPlan, editSourceRange } from './timeline';
-import type { EditPlan } from './types';
+import { appendPlan, editSourceRange, getKeepRanges } from './timeline';
+import type { EditOperation, EditPlan } from './types';
+
+type CutSpec = ['keep' | 'remove', number, number];
+type RangeSpec = [number, number];
+
+// Keep these behavioral cases aligned with tests/test_cut_contract.py.
+const cutCases: [string, CutSpec[], RangeSpec[]][] = [
+  ['no cuts', [], [[0, 36]]],
+  ['one keep', [['keep', 6, 18]], [[6, 18]]],
+  ['one remove', [['remove', 6, 12]], [[0, 6], [12, 36]]],
+  ['mixed', [['keep', 0, 18], ['remove', 6, 12]], [[0, 6], [12, 18]]],
+  ['mixed reverse order', [['remove', 6, 12], ['keep', 0, 18]], [[0, 6], [12, 18]]],
+  ['overlapping keeps', [['keep', 8, 18], ['keep', 2, 12]], [[2, 18]]],
+  ['adjacent keeps', [['keep', 6, 12], ['keep', 0, 6]], [[0, 12]]],
+  ['overlapping removes', [['remove', 8, 18], ['remove', 2, 12]], [[0, 2], [18, 36]]],
+  ['adjacent removes', [['remove', 6, 12], ['remove', 0, 6]], [[12, 36]]],
+  ['outside keep', [['keep', 6, 18], ['remove', 24, 36]], [[6, 18]]],
+  ['touching keep', [['keep', 6, 18], ['remove', 0, 6], ['remove', 18, 36]], [[6, 18]]],
+  ['remove spanning keeps', [['keep', 2, 8], ['keep', 12, 20], ['remove', 6, 15]], [[2, 6], [15, 20]]],
+  ['remove contains keep', [['keep', 6, 18], ['remove', 0, 24]], []],
+  ['all removed', [['remove', 0, 36]], []],
+  ['keep then all removed', [['keep', 0, 36], ['remove', 0, 36]], []],
+  ['duplicates', [['keep', 0, 18], ['keep', 0, 18], ['remove', 6, 12], ['remove', 6, 12]], [[0, 6], [12, 18]]],
+];
+
+const invalidRanges: RangeSpec[] = [
+  [-1, 6], [6, 6], [12, 6], [30, 50], [36, 40],
+  [NaN, 6], [0, NaN], [Infinity, 36], [0, Infinity], [-Infinity, 6],
+];
+
+describe('source-time cut contract', () => {
+  it.each(cutCases)('%s', (_name, specs, expected) => {
+    const operations: EditOperation[] = specs.map(([action, start_time, end_time]) => ({
+      type: 'cut', action, start_time, end_time,
+    }));
+    const original = JSON.stringify(operations);
+    expect(getKeepRanges(operations, 36)).toEqual(expected.map(([start_time, end_time]) => ({ start_time, end_time })));
+    expect(JSON.stringify(operations)).toBe(original);
+  });
+
+  it.each(invalidRanges)('rejects invalid interval [%s, %s] even if removed', (start_time, end_time) => {
+    for (const action of ['keep', 'remove']) {
+      expect(() => getKeepRanges([
+        { type: 'cut', action: 'remove', start_time: 0, end_time: 36 },
+        { type: 'cut', action, start_time, end_time },
+      ], 36)).toThrow('Cut ranges');
+    }
+  });
+
+  it.each([0, -1, NaN, Infinity, -Infinity])('rejects invalid duration %s even without cuts', (duration) => {
+    expect(() => getKeepRanges([], duration)).toThrow('Source duration');
+    expect(() => getKeepRanges([{ type: 'cut', action: 'keep', start_time: 0, end_time: 1 }], duration)).toThrow('Source duration');
+  });
+
+  it('rejects unknown actions and missing times', () => {
+    expect(() => getKeepRanges([{ type: 'cut', action: 'trim', start_time: 0, end_time: 10 }], 36)).toThrow('Cut ranges');
+    expect(() => getKeepRanges([{ type: 'cut', action: 'keep', start_time: 0 }], 36)).toThrow('Cut ranges');
+  });
+});
 
 const gradePlan: EditPlan = {
   instruction: 'warm color',
@@ -69,5 +127,29 @@ describe('source timeline editing', () => {
       summary: '',
     }, 20);
     expect(unmatched).toBe(warm);
+  });
+
+  it('intersects a later mixed plan with retained manual footage', () => {
+    const manual = editSourceRange(null, 36, 'keep', { start_time: 2, end_time: 24 });
+    const combined = appendPlan(manual, {
+      ...gradePlan,
+      operations: [
+        { type: 'cut', action: 'keep', start_time: 0, end_time: 18 },
+        { type: 'cut', action: 'remove', start_time: 6, end_time: 12 },
+      ],
+    }, 36);
+    expect(getKeepRanges(combined.operations, 36)).toEqual([
+      { start_time: 2, end_time: 6 }, { start_time: 12, end_time: 18 },
+    ]);
+    expect(combined.estimated_duration).toBe(10);
+  });
+
+  it('rejects an invalid or empty first proposal', () => {
+    for (const operations of [
+      [{ type: 'cut', action: 'keep', start_time: 30, end_time: 50 }],
+      [{ type: 'cut', action: 'remove', start_time: 0, end_time: 36 }],
+    ] as EditOperation[][]) {
+      expect(() => appendPlan(null, { ...gradePlan, operations }, 36)).toThrow();
+    }
   });
 });

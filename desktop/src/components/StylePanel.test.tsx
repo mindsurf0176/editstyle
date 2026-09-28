@@ -309,4 +309,30 @@ describe('StylePanel', () => {
 
     expect(container.textContent).not.toContain('Planning with vlog-casual');
   });
+
+  it('ignores an old style result after switching projects and unmounting its panel', async () => {
+    let current: AppState;
+    let send: (action: AppAction) => void;
+    function Harness() {
+      const [state, dispatch] = React.useReducer(appReducer, createState({ presets: [preset] }));
+      current = state; send = dispatch;
+      return <AppContext.Provider value={{ state, dispatch }}>
+        {state.sidebarTab === 'style' ? <StylePanel /> : null}
+      </AppContext.Provider>;
+    }
+    const pending = createDeferredPromise<EditPlan>();
+    getPresetMock.mockResolvedValue({ ...preset });
+    applyStyleMock.mockReturnValue(pending.promise);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(<Harness />));
+    await act(async () => getButtonByLabel(container, 'Apply now').click());
+    await act(async () => send({ type: 'SET_VIDEO', videoId: 'video-2', videoInfo: { ...videoInfo, video_id: 'video-2' } }));
+    await act(async () => pending.resolve(appliedPlan));
+    expect(current!.videoId).toBe('video-2');
+    expect(current!.editPlan).toBeNull();
+    expect(current!.planningStylePreset).toBeNull();
+    expect(current!.error).toBeNull();
+  });
 });

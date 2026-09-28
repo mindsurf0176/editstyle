@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Upload, Scissors, Subtitles, Clapperboard, Wand2, RefreshCw } from 'lucide-react';
 import { useApp } from '../store';
 import { createPlan, uploadVideo, getVideoInfo, analyzeVideo } from '../api';
+import { useProjectControls } from '../useProjectPersistence';
 
 interface ChatMessage {
   id: string;
@@ -24,6 +25,7 @@ interface ChatPanelProps {
 
 export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanelProps) {
   const { state, dispatch } = useApp();
+  const project = useProjectControls();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,10 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobBusy = state.activeJob?.status === 'running' || state.activeJob?.status === 'pending';
-  const busy = loading || uploading || jobBusy;
+  const busy = loading || uploading || jobBusy || Boolean(project && (!project.ready || project.transitioning));
+  const sourceAvailable = state.mediaStatus !== 'missing';
+
+  useEffect(() => { setMessages([]); setInput(''); }, [state.videoId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
@@ -53,14 +58,18 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
     setUploading(true);
     dispatch({ type: 'SET_UPLOAD_PROGRESS', progress: 0 });
     try {
-      const { video_id } = await uploadVideo(file, (progress) => {
+      const onProgress = (progress: number) => {
         dispatch({ type: 'SET_UPLOAD_PROGRESS', progress });
-      });
-      const videoInfo = await getVideoInfo(video_id);
-      dispatch({ type: 'SET_VIDEO', videoId: video_id, videoInfo });
+      };
+      const imported = project ? await project.importVideo(file, onProgress) : null;
+      if (project && !imported) return;
+      const video_id = imported?.video_id ?? (await uploadVideo(file, onProgress)).video_id;
+      const videoInfo = imported?.video_info ?? await getVideoInfo(video_id);
+      if (!project) dispatch({ type: 'SET_VIDEO', videoId: video_id, videoInfo });
+      dispatch({ type: 'SET_TRANSCRIBE_ON_IMPORT', enabled: state.transcribeOnImport });
       addMessage('assistant', `${file.name} loaded (${Math.round(videoInfo.duration)}s, ${videoInfo.width}×${videoInfo.height}). Analyzing scenes${state.transcribeOnImport ? ' and speech' : ' without transcription'}…`);
       const { job_id } = await analyzeVideo(video_id, state.transcribeOnImport);
-      dispatch({ type: 'SET_ACTIVE_JOB', job: { job_id, type: 'analysis', status: 'running', progress: 0 } });
+      dispatch({ type: 'SET_ACTIVE_JOB', videoId: video_id, job: { job_id, type: 'analysis', status: 'running', progress: 0 } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
       addMessage('system', `❌ ${msg}`);
@@ -73,7 +82,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
 
   const handleSend = async (text?: string) => {
     const instruction = text || input;
-    if (!instruction.trim() || busy) return;
+    if (!instruction.trim() || busy || !sourceAvailable || !state.backendOnline) return;
     if (!text) setInput('');
 
     addMessage('user', instruction);
@@ -110,6 +119,18 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
     }
   };
 
+  const retryAnalysis = async () => {
+    if (!state.videoId || busy || !sourceAvailable || !state.backendOnline) return;
+    setLoading(true);
+    try {
+      const { job_id } = await analyzeVideo(state.videoId, state.transcribeOnImport);
+      dispatch({ type: 'SET_ACTIVE_JOB', videoId: state.videoId,
+        job: { job_id, type: 'analysis', status: 'running', progress: 0 } });
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', error: error instanceof Error ? error.message : 'Analysis could not start.' });
+    } finally { setLoading(false); }
+  };
+
   const isEmpty = messages.length === 0;
 
   return (
@@ -130,6 +151,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
 
       <div className="px-5 py-3 border-b border-border text-[11px] text-text-muted space-y-2">
         <p>Local rules mode · no language model request</p>
+        <p>Plans and undo history are saved. Chat messages clear when you reopen or switch projects.</p>
         <label className="flex items-start gap-2">
           <input type="checkbox" checked={state.transcribeOnImport} disabled={busy}
             onChange={(event) => dispatch({ type: 'SET_TRANSCRIBE_ON_IMPORT', enabled: event.target.checked })} />
@@ -137,6 +159,9 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
         </label>
         {!state.transcribeOnImport ? <p>Scenes, cuts and preview work without transcription.</p> : null}
         {state.backendError ? <p role="status">{state.backendError}</p> : null}
+        {state.videoId && !state.analysis ? <button type="button" onClick={() => { void retryAnalysis(); }}
+          disabled={busy || !sourceAvailable || !state.backendOnline}
+          className="text-accent disabled:opacity-40">Retry analysis</button> : null}
       </div>
 
       {/* Messages */}
@@ -168,7 +193,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
                 <button
                   key={text}
                   onClick={() => handleSend(text)}
-                  disabled={!state.analysis || busy}
+                  disabled={!state.analysis || busy || !sourceAvailable || !state.backendOnline}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-surface border border-border text-sm text-text-secondary hover:text-text-primary hover:border-border-strong transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Icon size={14} className="text-accent flex-shrink-0" />
@@ -230,7 +255,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
           />
           <button
             type="submit"
-            disabled={!input.trim() || busy || !state.analysis || !state.backendOnline}
+            disabled={!input.trim() || busy || !state.analysis || !state.backendOnline || !sourceAvailable}
             aria-label="Send editing instruction"
             className="w-10 h-10 flex items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
           >

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -18,10 +19,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+
+from cutai.project_store import (
+    InvalidProjectState,
+    ProjectNotFound,
+    ProjectStore,
+    ProjectStoreError,
+    ProjectUpdate,
+    RevisionConflict,
+    get_data_dir,
+)
 
 
 @asynccontextmanager
@@ -39,14 +50,39 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for Tauri (localhost)
+# The desktop API serves durable local files. Browser origins must be explicit;
+# the mutation guard also covers simple multipart requests without a preflight.
+LOCAL_UI_ORIGINS = {
+    "http://localhost:1420", "http://127.0.0.1:1420",
+    "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost",
+}
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tauri uses tauri://localhost
-    allow_credentials=True,
+    allow_origins=sorted(LOCAL_UI_ORIGINS),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def guard_local_origin(request: Request, call_next):
+    origin = request.headers.get("origin")
+    if origin and origin not in LOCAL_UI_ORIGINS and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        return JSONResponse(status_code=403, content={"detail": "Origin is not allowed"})
+    return await call_next(request)
+
+
+@app.exception_handler(ProjectStoreError)
+async def project_storage_error(_request: Request, exc: ProjectStoreError):
+    status_code = 404 if isinstance(exc, ProjectNotFound) else 409 if isinstance(exc, RevisionConflict) else 503
+    return JSONResponse(status_code=status_code, content={"detail": str(exc)})
+
+
+@app.exception_handler(InvalidProjectState)
+async def project_state_error(_request: Request, exc: InvalidProjectState):
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +126,10 @@ RENDER_PRESETS: dict[RenderPresetName, RenderPresetSpec] = {
 
 # ── Storage ──────────────────────────────────────────────────────────────────
 
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "cutai_uploads"
+UPLOAD_DIR = get_data_dir() / "media"
 OUTPUT_DIR = Path(tempfile.gettempdir()) / "cutai_outputs"
 
-# In-memory registries (ephemeral, single-user desktop use)
+# Videos are a lazy cache of durable records. Jobs alone are intentionally transient.
 videos: dict[str, dict[str, Any]] = {}  # video_id -> {path, original_name, ...}
 jobs: dict[str, dict[str, Any]] = {}    # job_id -> {status, result, error, progress}
 UPLOAD_VIDEO_FILE = File(...)
@@ -161,11 +197,30 @@ class JobResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _get_video_or_404(video_id: str) -> dict[str, Any]:
-    """Retrieve video record or raise 404."""
-    if video_id not in videos:
-        raise HTTPException(status_code=404, detail=f"Video not found: {video_id}")
-    return videos[video_id]
+def _project_store() -> ProjectStore:
+    # Resolve configuration lazily: importing the server never touches user data.
+    return ProjectStore()
+
+
+def _get_video_or_404(video_id: str, *, require_media: bool = False) -> dict[str, Any]:
+    """Restore persisted metadata; explicitly injected transient records remain usable."""
+    info = videos.get(video_id)
+    if info is None or info.get("_persisted"):
+        info = _project_store().video_record(video_id)
+        videos[video_id] = info
+    if require_media and not Path(info["path"]).is_file():
+        raise HTTPException(status_code=409, detail="Source media is missing; the saved project is preserved")
+    return info
+
+
+def _persist_analysis(video_id: str, result: dict[str, Any]) -> None:
+    info = videos.get(video_id)
+    # Explicit ephemeral records support direct library callers and legacy fixtures.
+    if info is None or info.get("_persisted"):
+        _project_store().save_analysis(video_id, result)
+    if info is None:
+        info = _get_video_or_404(video_id)
+    info["analysis"] = result
 
 
 def _create_job(job_type: str) -> str:
@@ -199,6 +254,25 @@ def _get_job_response(job_id: str) -> JobResponse:
 def _build_output_path(original_name: str, suffix: str) -> str:
     stem = Path(original_name or "output.mp4").stem
     return str(OUTPUT_DIR / f"{stem}_{suffix}_{uuid.uuid4().hex[:8]}.mp4")
+
+
+def _validate_output_destination(output_path: str, source_path: str) -> None:
+    """Never allow an export to overwrite originals or project storage, even via links."""
+    try:
+        destination = Path(output_path).resolve()
+        source = Path(source_path).resolve()
+        data_dir = get_data_dir()
+        if destination == source or destination.is_relative_to(data_dir):
+            raise HTTPException(status_code=422, detail="Export destination would overwrite protected project data")
+        if destination.exists():
+            if destination.is_dir() or (source.exists() and destination.samefile(source)):
+                raise HTTPException(status_code=422, detail="Export destination would overwrite source media")
+            # resolve() detects symlinks; samefile() also catches external hard links.
+            for protected in data_dir.rglob("*"):
+                if protected.is_file() and destination.samefile(protected):
+                    raise HTTPException(status_code=422, detail="Export destination aliases protected project data")
+    except OSError as exc:
+        raise HTTPException(status_code=422, detail=f"Cannot validate export destination: {exc}") from exc
 
 
 def _build_export_artifacts(
@@ -274,34 +348,58 @@ async def upload_video(file: UploadFile = UPLOAD_VIDEO_FILE) -> dict:
 
     video_id = str(uuid.uuid4())
     suffix = Path(file.filename).suffix or ".mp4"
-    dest = UPLOAD_DIR / f"{video_id}{suffix}"
+    store = _project_store()
+    dest = store.media_dir / f"{video_id}{suffix}"
+    temporary: Path | None = None
+    committed = False
+    try:
+        store.media_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=store.media_dir, suffix=".upload", delete=False) as stream:
+            temporary = Path(stream.name)
+            while chunk := await file.read(1024 * 1024):
+                stream.write(chunk)
+            stream.flush()
+            os.fsync(stream.fileno())
+        meta = await asyncio.to_thread(_probe_video, str(temporary))
+        record = {
+            "path": str(dest), "original_name": file.filename,
+            "file_size": temporary.stat().st_size,
+            "duration": meta.get("duration", 0.0), "width": meta.get("width", 0),
+            "height": meta.get("height", 0), "fps": meta.get("fps", 0.0),
+        }
+        from cutai.project_store import VideoInfo
 
-    # Stream file to disk
-    with open(dest, "wb") as f:
-        while chunk := await file.read(1024 * 1024):  # 1MB chunks
-            f.write(chunk)
-
-    # Get basic metadata via ffprobe
-    meta = await asyncio.to_thread(_probe_video, str(dest))
-
-    videos[video_id] = {
-        "path": str(dest),
-        "original_name": file.filename,
-        "file_size": dest.stat().st_size,
-        "duration": meta.get("duration", 0.0),
-        "width": meta.get("width", 0),
-        "height": meta.get("height", 0),
-        "fps": meta.get("fps", 0.0),
-    }
-
-    return {"video_id": video_id, **videos[video_id]}
+        try:
+            VideoInfo(video_id=video_id, **{key: value for key, value in record.items() if key != "path"})
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Uploaded file has no valid video metadata") from exc
+        os.replace(temporary, dest)
+        directory_fd = os.open(store.media_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        store.create(video_id, record)
+        committed = True
+        videos[video_id] = {**record, "_persisted": True}
+        return {"video_id": video_id, **record, "project_revision": 0}
+    except OSError as exc:
+        raise ProjectStoreError(f"Unable to store uploaded media: {exc}") from exc
+    finally:
+        if not committed:
+            for path in (temporary, dest):
+                if path is not None:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        logger.exception("Could not clean incomplete upload %s", path)
 
 
 @app.get("/api/videos/{video_id}")
 async def get_video(video_id: str) -> dict:
     """Get video info (path, duration, etc.)."""
     info = _get_video_or_404(video_id)
-    return {"video_id": video_id, **info}
+    return {"video_id": video_id, **{key: value for key, value in info.items() if not key.startswith("_")}}
 
 
 @app.get("/api/videos/{video_id}/analysis")
@@ -317,6 +415,12 @@ async def get_video_analysis(video_id: str) -> dict:
 async def delete_video(video_id: str) -> dict:
     """Delete an uploaded video."""
     info = _get_video_or_404(video_id)
+    try:
+        _project_store().get(video_id)
+    except ProjectNotFound:
+        pass
+    else:
+        raise HTTPException(status_code=409, detail="Source media belongs to a saved project and cannot be deleted")
     path = Path(info["path"])
     if path.exists():
         path.unlink()
@@ -327,7 +431,7 @@ async def delete_video(video_id: str) -> dict:
 @app.get("/api/videos/{video_id}/thumbnail")
 async def get_thumbnail(video_id: str, time: float = Query(0.0, ge=0)) -> FileResponse:
     """Extract and return a single frame at the given timestamp."""
-    info = _get_video_or_404(video_id)
+    info = _get_video_or_404(video_id, require_media=True)
     video_path = info["path"]
 
     # Clamp time to video duration
@@ -335,7 +439,8 @@ async def get_thumbnail(video_id: str, time: float = Query(0.0, ge=0)) -> FileRe
     if duration > 0 and time > duration:
         time = duration - 0.1
 
-    thumb_path = UPLOAD_DIR / f"thumb_{video_id}_{time:.2f}.jpg"
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    thumb_path = OUTPUT_DIR / f"thumb_{video_id}_{time:.2f}.jpg"
 
     if not thumb_path.exists():
         await asyncio.to_thread(_extract_thumbnail, video_path, str(thumb_path), time)
@@ -346,10 +451,35 @@ async def get_thumbnail(video_id: str, time: float = Query(0.0, ge=0)) -> FileRe
 # ── 2. Analysis ──────────────────────────────────────────────────────────────
 
 
+@app.get("/api/projects/current")
+async def current_project() -> dict | None:
+    return _project_store().current()
+
+
+@app.get("/api/projects")
+async def list_projects() -> list[dict]:
+    return _project_store().list_projects()
+
+
+@app.get("/api/projects/{video_id}")
+async def get_project(video_id: str) -> dict:
+    return _project_store().get(video_id)
+
+
+@app.post("/api/projects/{video_id}/open")
+async def open_project(video_id: str) -> dict:
+    return _project_store().open(video_id)
+
+
+@app.put("/api/projects/{video_id}")
+async def save_project(video_id: str, req: ProjectUpdate) -> dict:
+    return _project_store().save(video_id, req.expected_revision, req.state)
+
+
 @app.post("/api/videos/{video_id}/analyze")
 async def start_analysis(video_id: str, req: AnalyzeRequest | None = None) -> dict:
     """Start video analysis as a background task. Returns job_id."""
-    info = _get_video_or_404(video_id)
+    info = _get_video_or_404(video_id, require_media=True)
     if req is None:
         req = AnalyzeRequest()
 
@@ -446,13 +576,11 @@ async def _run_analysis(
             quality=quality,
         )
 
+        result = analysis.model_dump()
+        _persist_analysis(video_id, result)
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100.0
-        result = analysis.model_dump()
         jobs[job_id]["result"] = result
-
-        # Cache analysis on the video record
-        videos[video_id]["analysis"] = result
     except Exception as e:
         logger.exception("Analysis failed for job %s", job_id)
         jobs[job_id]["status"] = "failed"
@@ -523,7 +651,7 @@ def _validate_media_request(plan_data: dict, analysis_data: dict) -> None:
 @app.post("/api/render")
 async def start_render(req: RenderRequest) -> dict:
     """Start rendering as a background task. Returns job_id."""
-    info = _get_video_or_404(req.video_id)
+    info = _get_video_or_404(req.video_id, require_media=True)
 
     analysis_data = info.get("analysis")
     if not analysis_data:
@@ -538,6 +666,9 @@ async def start_render(req: RenderRequest) -> dict:
     output_path = req.output_path
     if not output_path:
         output_path = _build_output_path(info.get("original_name", "output.mp4"), "render")
+    _validate_output_destination(output_path, info["path"])
+    if _resolve_subtitle_export_mode(req) == "sidecar":
+        _validate_output_destination(str(Path(output_path).with_suffix(".ass")), info["path"])
 
     job_id = _create_job("render")
     asyncio.create_task(
@@ -572,7 +703,7 @@ async def get_render_video(job_id: str) -> FileResponse:
 @app.post("/api/preview")
 async def start_preview(req: PreviewRequest) -> dict:
     """Start preview rendering as a background task. Returns job_id."""
-    info = _get_video_or_404(req.video_id)
+    info = _get_video_or_404(req.video_id, require_media=True)
 
     analysis_data = info.get("analysis")
     if not analysis_data:
@@ -586,6 +717,7 @@ async def start_preview(req: PreviewRequest) -> dict:
     output_path = req.output_path
     if not output_path:
         output_path = _build_output_path(info.get("original_name", "preview.mp4"), "preview")
+    _validate_output_destination(output_path, info["path"])
 
     job_id = _create_job("preview")
     asyncio.create_task(
@@ -912,7 +1044,7 @@ async def get_preset(name: str) -> dict:
 @app.post("/api/styles/extract")
 async def extract_style_endpoint(req: StyleExtractRequest) -> dict:
     """Extract editing style (Edit DNA) from a video. Returns job_id."""
-    info = _get_video_or_404(req.video_id)
+    info = _get_video_or_404(req.video_id, require_media=True)
     job_id = _create_job("style_extract")
     asyncio.create_task(_run_style_extract(job_id, info["path"]))
     return {"job_id": job_id, "status": "pending"}
@@ -965,7 +1097,7 @@ async def apply_style_endpoint(req: StyleApplyRequest) -> dict:
 @app.post("/api/videos/{video_id}/engagement")
 async def compute_engagement(video_id: str) -> dict:
     """Compute engagement scores. Returns job_id."""
-    info = _get_video_or_404(video_id)
+    info = _get_video_or_404(video_id, require_media=True)
     job_id = _create_job("engagement")
     asyncio.create_task(_run_engagement(job_id, video_id, info["path"]))
     return {"job_id": job_id, "status": "pending"}
@@ -981,6 +1113,7 @@ async def _run_engagement(job_id: str, video_id: str, video_path: str) -> None:
         jobs[job_id]["progress"] = 20.0
         analysis, report = await asyncio.to_thread(analyze_with_engagement, video_path)
         jobs[job_id]["progress"] = 90.0
+        _persist_analysis(video_id, analysis.model_dump())
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100.0
         jobs[job_id]["result"] = {
@@ -988,8 +1121,6 @@ async def _run_engagement(job_id: str, video_id: str, video_path: str) -> None:
             "engagement": report.model_dump(),
         }
 
-        # Cache analysis on the video record
-        videos[video_id]["analysis"] = analysis.model_dump()
     except Exception as e:
         logger.exception("Engagement analysis failed for job %s", job_id)
         jobs[job_id]["status"] = "failed"
@@ -999,7 +1130,7 @@ async def _run_engagement(job_id: str, video_id: str, video_path: str) -> None:
 @app.post("/api/highlights")
 async def generate_highlights(req: HighlightRequest) -> dict:
     """Generate highlight reel from engagement analysis. Returns job_id."""
-    info = _get_video_or_404(req.video_id)
+    info = _get_video_or_404(req.video_id, require_media=True)
 
     analysis_data = info.get("analysis")
     if not analysis_data:
@@ -1065,6 +1196,10 @@ async def _run_highlights(
 @app.websocket("/ws/progress/{job_id}")
 async def ws_progress(websocket: WebSocket, job_id: str) -> None:
     """Stream job progress updates via WebSocket."""
+    origin = websocket.headers.get("origin")
+    if origin and origin not in LOCAL_UI_ORIGINS:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
 
     if job_id not in jobs:

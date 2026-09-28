@@ -14,6 +14,7 @@ import type {
   OutputHistoryItem,
   TimelineSelection,
   CommandResultSummary,
+  ProjectSnapshot,
 } from './types';
 
 export type ViewMode = 'upload' | 'editor' | 'rendering';
@@ -31,6 +32,8 @@ function mergeRecentOutputs(
 }
 
 export interface AppState {
+  projectRevision: number | null;
+  mediaStatus: 'available' | 'missing';
   videoId: string | null;
   videoInfo: VideoInfo | null;
   analysis: VideoAnalysis | null;
@@ -60,6 +63,8 @@ export interface AppState {
 }
 
 export const initialState: AppState = {
+  projectRevision: null,
+  mediaStatus: 'available',
   videoId: null,
   videoInfo: null,
   analysis: null,
@@ -89,14 +94,17 @@ export const initialState: AppState = {
 };
 
 export type AppAction =
+  | { type: 'HYDRATE_PROJECT'; project: ProjectSnapshot }
+  | { type: 'SET_PROJECT_REVISION'; videoId: string; revision: number }
   | { type: 'SET_VIDEO'; videoId: string; videoInfo: VideoInfo }
   | { type: 'SET_ANALYSIS'; analysis: VideoAnalysis }
   | { type: 'SET_EDIT_PLAN'; plan: EditPlan; revision?: number }
   | { type: 'APPLY_PLAN_PROPOSAL'; plan: EditPlan; revision: number }
+  | { type: 'APPLY_STYLE_PLAN'; plan: EditPlan; preset: Preset | null; videoId: string; revision: number }
   | { type: 'EDIT_SOURCE_RANGE'; action: 'keep' | 'remove'; start: number; end: number }
   | { type: 'CLEAR_EDIT_PLAN' }
   | { type: 'REMOVE_OPERATION'; index: number }
-  | { type: 'SET_ACTIVE_JOB'; job: Job; revision?: number }
+  | { type: 'SET_ACTIVE_JOB'; job: Job; revision?: number; videoId?: string }
   | { type: 'SYNC_ACTIVE_JOB'; job: Job }
   | { type: 'UPDATE_JOB_PROGRESS'; progress: number; status: Job['status']; jobId?: string }
   | { type: 'SET_PREVIEW_RESULT'; preview: PreviewAsset | null }
@@ -124,11 +132,39 @@ export type AppAction =
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'HYDRATE_PROJECT': {
+      const project = action.project;
+      return {
+        ...state,
+        videoId: project.video_id,
+        videoInfo: project.video_info,
+        analysis: project.analysis,
+        projectRevision: project.revision,
+        mediaStatus: project.media_status,
+        editPlan: project.state.edit_plan,
+        commandUndoStack: project.state.undo_stack.slice(0, 20),
+        previewResolution: project.state.preview_resolution,
+        renderPreset: project.state.render_preset,
+        subtitleExportMode: project.state.subtitle_export_mode,
+        planningStylePreset: project.state.planning_style_preset,
+        transcribeOnImport: project.state.transcribe_on_import,
+        editRevision: state.editRevision + 1,
+        view: 'editor', sidebarTab: 'edit', uploadProgress: 0,
+        activeJob: null, previewResult: null, renderResult: null, recentOutputs: [],
+        currentTime: 0, timelineSelection: { type: 'none' },
+        lastCommandSummary: null, error: null,
+      };
+    }
+    case 'SET_PROJECT_REVISION':
+      return action.videoId === state.videoId && action.revision >= (state.projectRevision ?? 0)
+        ? { ...state, projectRevision: action.revision } : state;
     case 'SET_VIDEO':
       return {
         ...state,
         videoId: action.videoId,
         videoInfo: action.videoInfo,
+        projectRevision: 0,
+        mediaStatus: 'available',
         view: 'editor',
         sidebarTab: 'edit',
         uploadProgress: 0,
@@ -149,6 +185,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_EDIT_PLAN':
       if (action.revision !== undefined && action.revision !== state.editRevision) return state;
       return updatePlan(state, action.plan);
+    case 'APPLY_STYLE_PLAN': {
+      if (action.videoId !== state.videoId || action.revision !== state.editRevision) return state;
+      const next = updatePlan(state, action.plan);
+      return next.editPlan === action.plan
+        ? { ...next, planningStylePreset: action.preset, sidebarTab: 'edit', view: 'editor' } : next;
+    }
     case 'APPLY_PLAN_PROPOSAL': {
       if (action.revision !== state.editRevision) return state;
       try {
@@ -184,6 +226,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return updatePlan(state, { ...state.editPlan, operations, estimated_duration: estimatedDuration });
     }
     case 'SET_ACTIVE_JOB':
+      if (action.videoId !== undefined && action.videoId !== state.videoId) return state;
       if (action.revision !== undefined && action.revision !== state.editRevision) return state;
       if (state.activeJob && state.activeJob.job_id !== action.job.job_id
         && (state.activeJob.status === 'pending' || state.activeJob.status === 'running')) return state;
@@ -282,6 +325,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_BACKEND_STATE':
       return {
         ...state,
+        ...(action.status === 'offline' ? {
+          activeJob: null, previewResult: null, renderResult: null, recentOutputs: [],
+          view: state.videoId ? 'editor' as const : 'upload' as const,
+          editRevision: state.editRevision + (state.backendOnline ? 1 : 0),
+        } : {}),
         backendStatus: action.status,
         backendOnline: action.status === 'online',
         backendError: action.error ?? null,

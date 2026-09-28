@@ -159,3 +159,32 @@ export interface EditDNA {
   visual: number;
   audio: number;
 }
+
+export interface ProjectEditingState {
+  edit_plan: EditPlan | null;
+  undo_stack: Array<EditPlan | null>;
+  preview_resolution: PreviewResolution;
+  render_preset: RenderPreset;
+  subtitle_export_mode: SubtitleExportMode;
+  planning_style_preset: Preset | null;
+  transcribe_on_import: boolean;
+}
+
+export interface ProjectSnapshot {
+  schema_version: 1;
+  video_id: string;
+  revision: number;
+  updated_at: string;
+  video_info: VideoInfo;
+  analysis: VideoAnalysis | null;
+  media_status: 'available' | 'missing';
+  state: ProjectEditingState;
+}
+
+export interface RecentProject {
+  video_id: string;
+  original_name: string;
+  revision: number;
+  updated_at: string;
+  media_status: 'available' | 'missing';
+}

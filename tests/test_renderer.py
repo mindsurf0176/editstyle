@@ -77,6 +77,19 @@ class TestAdjustTranscriptForCuts:
         adjusted = _adjust_transcript_for_cuts(transcript, cuts, 10)
         assert [(seg.start_time, seg.end_time) for seg in adjusted] == [(2, 4)]
 
+    def test_mixed_cuts_exclude_speech_outside_explicit_keeps(self):
+        transcript = [
+            TranscriptSegment(start_time=0, end_time=36, text="crosses both retained spans"),
+            TranscriptSegment(start_time=20, end_time=24, text="outside keep"),
+        ]
+        cuts = [CutOperation(action="keep", start_time=0, end_time=18),
+                CutOperation(action="remove", start_time=6, end_time=12)]
+        adjusted = _adjust_transcript_for_cuts(transcript, cuts, 36)
+        assert [(seg.text, seg.start_time, seg.end_time) for seg in adjusted] == [
+            ("crosses both retained spans", 0, 6),
+            ("crosses both retained spans", 6, 12),
+        ]
+
 
 def test_transition_times_and_scene_ids_follow_kept_scene_spans(sample_analysis):
     cuts = [CutOperation(action="keep", start_time=6, end_time=12)]
@@ -113,11 +126,13 @@ INVALID_TIMING_OPERATIONS = [
 @pytest.mark.parametrize("operations", INVALID_TIMING_OPERATIONS)
 @pytest.mark.parametrize("endpoint", ["/api/preview", "/api/render"])
 def test_media_api_rejects_unsupported_timing_before_creating_job(
-    monkeypatch, sample_analysis, operations, endpoint,
+    monkeypatch, tmp_path, sample_analysis, operations, endpoint,
 ):
+    source = tmp_path / "source.mp4"
+    source.touch()
     monkeypatch.setattr(server, "jobs", {})
     monkeypatch.setattr(server, "videos", {
-        "video": {"path": "unused.mp4", "analysis": sample_analysis.model_dump()},
+        "video": {"path": str(source), "analysis": sample_analysis.model_dump()},
     })
     plan = EditPlan(instruction="mixed", operations=operations, estimated_duration=12, summary="mixed")
     response = TestClient(server.app).post(endpoint, json={"video_id": "video", "plan": plan.model_dump()})
@@ -127,11 +142,13 @@ def test_media_api_rejects_unsupported_timing_before_creating_job(
 
 
 @pytest.mark.parametrize("endpoint", ["/api/preview", "/api/render"])
-def test_media_api_rejects_subtitles_without_transcript(monkeypatch, sample_analysis, endpoint):
+def test_media_api_rejects_subtitles_without_transcript(monkeypatch, tmp_path, sample_analysis, endpoint):
     sample_analysis.transcript = []
+    source = tmp_path / "source.mp4"
+    source.touch()
     monkeypatch.setattr(server, "jobs", {})
     monkeypatch.setattr(server, "videos", {
-        "video": {"path": "unused.mp4", "analysis": sample_analysis.model_dump()},
+        "video": {"path": str(source), "analysis": sample_analysis.model_dump()},
     })
     plan = EditPlan(instruction="subtitles", operations=[SubtitleOperation()], estimated_duration=35)
     response = TestClient(server.app).post(endpoint, json={"video_id": "video", "plan": plan.model_dump()})
@@ -156,10 +173,39 @@ def test_single_speed_change_remains_supported(sample_analysis):
     validate_render_plan(plan, sample_analysis)
 
 
+@pytest.mark.parametrize("operations,error", [
+    ([CutOperation(action="keep", start_time=30, end_time=50)], "Cut ranges"),
+    ([CutOperation(action="remove", start_time=0, end_time=35)], "entire video"),
+    ([CutOperation(action="keep", start_time=10, end_time=5)], "Cut ranges"),
+    ([SpeedOperation(factor=2, start_time=30, end_time=50)], "Speed ranges"),
+])
+@pytest.mark.parametrize("endpoint", ["/api/preview", "/api/render"])
+def test_media_api_rejects_invalid_source_times_before_creating_job(
+    monkeypatch, tmp_path, sample_analysis, operations, error, endpoint,
+):
+    source = tmp_path / "source.mp4"
+    source.touch()
+    monkeypatch.setattr(server, "jobs", {})
+    monkeypatch.setattr(server, "videos", {
+        "video": {"path": str(source), "analysis": sample_analysis.model_dump()},
+    })
+    plan = EditPlan(instruction="invalid", operations=operations)
+    response = TestClient(server.app).post(endpoint, json={"video_id": "video", "plan": plan.model_dump()})
+    assert response.status_code == 422
+    assert error in response.json()["detail"]
+    assert server.jobs == {}
+
+
 @pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="FFmpeg required")
 @pytest.mark.parametrize("pipeline", ["direct", "server"])
+@pytest.mark.parametrize("cuts", [
+    [CutOperation(action="keep", start_time=1, end_time=3),
+     CutOperation(action="keep", start_time=4, end_time=6)],
+    [CutOperation(action="keep", start_time=1, end_time=6),
+     CutOperation(action="remove", start_time=3, end_time=4)],
+], ids=["keeps", "mixed"])
 def test_kept_captions_are_written_at_output_times_in_actual_sidecar(
-    monkeypatch, tmp_path, pipeline,
+    monkeypatch, tmp_path, pipeline, cuts,
 ):
     source = tmp_path / "source.mp4"
     output = tmp_path / "edited.mp4"
@@ -176,11 +222,7 @@ def test_kept_captions_are_written_at_output_times_in_actual_sidecar(
             TranscriptSegment(start_time=4, end_time=6, text="retained-second"),
         ],
     )
-    plan = EditPlan(instruction="cut and caption", operations=[
-        CutOperation(action="keep", start_time=1, end_time=3),
-        CutOperation(action="keep", start_time=4, end_time=6),
-        SubtitleOperation(),
-    ], estimated_duration=4)
+    plan = EditPlan(instruction="cut and caption", operations=[*cuts, SubtitleOperation()], estimated_duration=4)
     if pipeline == "direct":
         render(str(source), plan, analysis, str(output), burn_subtitles=False)
     else:

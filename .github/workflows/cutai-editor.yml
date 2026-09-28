@@ -19,6 +19,9 @@ jobs:
           pip install -e ".[cutai,app,mcp,dev]"
       - name: Python regression tests
         run: python -m pytest tests -q
+      - name: Real-media project save and process-restart acceptance
+        timeout-minutes: 5
+        run: python scripts/qa-cutai-projects.py --job-timeout 120
       - uses: actions/setup-node@v4
         with:
           node-version: 22

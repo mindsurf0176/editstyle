@@ -6,6 +6,7 @@ Applies CutOperations by extracting segments and concatenating them.
 from __future__ import annotations
 
 import logging
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -21,11 +22,13 @@ def apply_cuts(
     operations: list[CutOperation],
     output_path: str,
     force_reencode: bool = True,
+    *,
+    source_duration: float | None = None,
 ) -> str:
     """Apply cut operations to a video.
 
     Strategy:
-    1. Convert remove operations to keep operations (invert).
+    1. Subtract remove ranges from explicit keeps (or the whole source).
     2. Extract each "keep" segment as a temp file.
     3. Concatenate all segments.
 
@@ -38,30 +41,22 @@ def apply_cuts(
         operations: List of CutOperations.
         output_path: Path for the output video.
         force_reencode: Re-encode for accurate cuts (default True).
+        source_duration: Original-source duration for a derived preview proxy.
+            Only supply after validating the plan against the original media;
+            transcoding can change the proxy container's duration through padding.
 
     Returns:
         Path to the output video.
     """
-    ffmpeg = ensure_ffmpeg()
+    _validate_output_path(video_path, output_path)
+    duration = _get_duration(video_path) if source_duration is None else source_duration
+    keep_ranges = _compute_keep_ranges(operations, duration)
+    if not keep_ranges:
+        raise ValueError("The cut plan removes the entire video. Keep at least one segment.")
 
+    ffmpeg = ensure_ffmpeg()
     if not operations:
         logger.info("No cut operations — copying input to output")
-        _copy_video(ffmpeg, video_path, output_path)
-        return output_path
-
-    # Get video duration
-    duration = _get_duration(video_path)
-    if duration <= 0.0:
-        raise RuntimeError(
-            f"Failed to determine video duration for '{video_path}'. "
-            "FFprobe returned 0.0 — the file may be corrupt or unsupported."
-        )
-
-    # Compute keep ranges by inverting remove ranges
-    keep_ranges = _compute_keep_ranges(operations, duration)
-
-    if not keep_ranges:
-        logger.warning("All content would be removed! Keeping original.")
         _copy_video(ffmpeg, video_path, output_path)
         return output_path
 
@@ -86,36 +81,69 @@ def apply_cuts(
     return output_path
 
 
+def _validate_output_path(video_path: str, output_path: str) -> None:
+    """Protect the source from direct, symlink, or hardlink output aliases."""
+    source = Path(video_path)
+    output = Path(output_path)
+    if source.resolve() == output.resolve() or (
+        source.exists() and output.exists() and source.samefile(output)
+    ):
+        raise ValueError("Output path must not overwrite the source video. Choose a different file.")
+
+
 def _compute_keep_ranges(
     operations: list[CutOperation],
     total_duration: float,
 ) -> list[tuple[float, float]]:
-    """Convert cut operations into a list of (start, end) ranges to keep.
+    """Validate source times and subtract remove ranges from the union of keeps.
 
-    Handles both 'keep' and 'remove' actions.
+    Without explicit keeps, the base is the entire source. Empty results are
+    returned here for callers to inspect; rendering must reject them.
     """
-    # Separate keep and remove operations
+    if not math.isfinite(total_duration) or total_duration <= 0:
+        raise ValueError("Source duration must be finite and greater than zero.")
+    for op in operations:
+        if op.action not in ("keep", "remove"):
+            raise ValueError("Cut action must be 'keep' or 'remove'.")
+        _validate_source_range(op.start_time, op.end_time, total_duration, "Cut")
+
     keeps = [(op.start_time, op.end_time) for op in operations if op.action == "keep"]
     removes = [(op.start_time, op.end_time) for op in operations if op.action == "remove"]
+    base = _merge_ranges(keeps) if keeps else [(0.0, total_duration)]
+    merged_removes = _merge_ranges(removes)
+    remaining: list[tuple[float, float]] = []
+    for keep_start, keep_end in base:
+        cursor = keep_start
+        for remove_start, remove_end in merged_removes:
+            if remove_end <= cursor:
+                continue
+            if remove_start >= keep_end:
+                break
+            if remove_start > cursor:
+                remaining.append((cursor, remove_start))
+            cursor = max(cursor, remove_end)
+            if cursor >= keep_end:
+                break
+        if cursor < keep_end:
+            remaining.append((cursor, keep_end))
+    return remaining
 
-    if keeps and not removes:
-        # Explicit keep ranges
-        keeps.sort()
-        return _merge_ranges(keeps)
 
-    if removes:
-        # Invert remove ranges to get keep ranges
-        removes.sort()
-        merged_removes = _merge_ranges(removes)
-        return _invert_ranges(merged_removes, total_duration)
-
-    return [(0.0, total_duration)]
+def _validate_source_range(start: float, end: float, duration: float, label: str) -> None:
+    """Reject invalid source intervals without silently clamping their bounds."""
+    if (not math.isfinite(start) or not math.isfinite(end)
+            or start < 0 or end <= start or end > duration):
+        raise ValueError(
+            f"{label} ranges must be finite and satisfy 0 <= start < end <= source duration "
+            f"({duration:g} seconds)."
+        )
 
 
 def _merge_ranges(ranges: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Merge overlapping time ranges."""
+    """Sort and merge overlapping or adjacent time ranges."""
     if not ranges:
         return []
+    ranges = sorted(ranges)
     merged: list[tuple[float, float]] = [ranges[0]]
     for start, end in ranges[1:]:
         if start <= merged[-1][1]:
@@ -123,25 +151,6 @@ def _merge_ranges(ranges: list[tuple[float, float]]) -> list[tuple[float, float]
         else:
             merged.append((start, end))
     return merged
-
-
-def _invert_ranges(
-    removes: list[tuple[float, float]],
-    total_duration: float,
-) -> list[tuple[float, float]]:
-    """Given a list of remove ranges, return the complementary keep ranges."""
-    keeps: list[tuple[float, float]] = []
-    cursor = 0.0
-
-    for start, end in removes:
-        if cursor < start:
-            keeps.append((cursor, start))
-        cursor = end
-
-    if cursor < total_duration:
-        keeps.append((cursor, total_duration))
-
-    return keeps
 
 
 def _extract_segment(
@@ -215,7 +224,12 @@ def _copy_video(ffmpeg: str, src: str, dst: str) -> None:
 
 
 def _get_duration(video_path: str) -> float:
-    """Get video duration using FFprobe."""
+    """Get the canonical millisecond source boundary used by import and analysis.
+
+    FFprobe can report sub-millisecond container precision. The project/API
+    boundary is round(duration, 3), so every original-source cut uses that same
+    boundary. This quantizes metadata once; it does not clamp cut intervals.
+    """
     from cutai.config import ensure_ffprobe
 
     ffprobe = ensure_ffprobe()
@@ -228,6 +242,6 @@ def _get_duration(video_path: str) -> float:
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     try:
-        return float(result.stdout.strip())
+        return round(float(result.stdout.strip()), 3)
     except ValueError:
         return 0.0

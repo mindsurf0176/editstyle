@@ -9,8 +9,14 @@ export default function StylePanel() {
   const [applied, setApplied] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const current = useRef(state);
+  const mounted = useRef(false);
   current.current = state;
   const busy = applying !== null || state.activeJob?.status === 'pending' || state.activeJob?.status === 'running';
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     if (state.presets.length > 0) return;
@@ -32,30 +38,32 @@ export default function StylePanel() {
   const handleApply = async (presetName: string) => {
     if (!state.videoId || !state.analysis || busy) return;
     const revision = state.editRevision;
+    const videoId = state.videoId;
+    const stillCurrent = () => mounted.current && current.current.videoId === videoId;
     setApplying(presetName);
     setApplied(null);
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
       const preset = await getPreset(presetName);
-      const plan = await applyStyle(state.videoId, preset);
+      if (!stillCurrent()) return;
+      const plan = await applyStyle(videoId, preset);
+      if (!stillCurrent()) return;
       if (current.current.editRevision !== revision) {
         throw new Error('The edit changed while applying the style. Please review and apply again.');
       }
       if (plan.operations.some((operation) => operation.type === 'subtitle') && !state.analysis.transcript.length) {
         throw new Error('This preset needs a transcript. Enable speech transcription and import the video again.');
       }
-      dispatch({ type: 'SET_EDIT_PLAN', plan, revision });
       const selectedPreset = state.presets.find((candidate) => candidate.name === presetName) ?? null;
-      dispatch({ type: 'SET_PLANNING_STYLE_PRESET', preset: selectedPreset });
-      dispatch({ type: 'SET_SIDEBAR_TAB', tab: 'edit' });
-      dispatch({ type: 'SET_VIEW', view: 'editor' });
+      dispatch({ type: 'APPLY_STYLE_PLAN', plan, preset: selectedPreset, videoId, revision });
       setApplied(presetName);
     } catch (err) {
+      if (!stillCurrent()) return;
       const msg = err instanceof Error ? err.message : 'Failed to apply style';
       dispatch({ type: 'SET_ERROR', error: msg });
     } finally {
-      setApplying(null);
+      if (mounted.current) setApplying(null);
     }
   };
 

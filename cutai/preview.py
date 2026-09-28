@@ -62,6 +62,17 @@ def render_preview(
         ).hexdigest()[:8]
         output_path = f"/tmp/cutai_preview_{plan_hash}.mp4"
 
+    from cutai.editor.cutter import _get_duration, _validate_output_path
+    from cutai.editor.renderer import render, validate_render_plan
+
+    _validate_output_path(video_path, output_path)
+    validate_render_plan(plan, analysis)
+    # Validate the original media boundary before transcoding. AAC padding and
+    # frame time bases can change the proxy duration without changing source time.
+    source_duration = _get_duration(video_path)
+    source_analysis = analysis.model_copy(update={"duration": source_duration})
+    validate_render_plan(plan, source_analysis)
+
     logger.info(
         "Generating preview: %s → %dp → %s",
         source.name,
@@ -75,17 +86,16 @@ def render_preview(
         _downscale_video(video_path, proxy_path, resolution)
 
         # Step 2: Create a scaled analysis for the proxy
-        proxy_analysis = _create_proxy_analysis(analysis, resolution)
+        proxy_analysis = _create_proxy_analysis(source_analysis, resolution)
 
         # Step 3: Apply the edit plan to the proxy
         if plan.operations:
-            from cutai.editor.renderer import render
-
             result = render(
                 proxy_path,
                 plan,
                 proxy_analysis,
                 output_path,
+                source_duration=source_duration,
             )
             return result
         else:
