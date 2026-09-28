@@ -9,6 +9,7 @@ import subprocess
 from array import array
 from pathlib import Path
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,6 +32,34 @@ def _frame(path, index):
          "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         check=True, capture_output=True, timeout=30,
     ).stdout
+
+
+def _decoded_frames(path):
+    """Decode each actual frame once, without rawvideo's own FPS duplication."""
+    raw = subprocess.run([
+        "ffmpeg", "-v", "error", "-i", str(path), "-fps_mode", "passthrough",
+        "-vf", "scale=80:45", "-pix_fmt", "gray", "-f", "rawvideo", "-",
+    ], check=True, capture_output=True, timeout=30).stdout
+    return np.frombuffer(raw, dtype=np.uint8).reshape((-1, 80 * 45)).astype(np.int16)
+
+
+def _assert_retained_frame_sequence(source_frames, output, expected, max_duplicates, context):
+    actual_frames = _decoded_frames(output)
+    mapping, errors = [], []
+    for frame in actual_frames:
+        # Search ALL source frames, including removed content: merely matching
+        # against the allowed subset could mistake removed footage for a keep.
+        distances = np.mean(np.abs(source_frames - frame), axis=1)
+        source_index = int(np.argmin(distances))
+        mapping.append(source_index)
+        errors.append(float(distances[source_index]))
+    sequence = [index for i, index in enumerate(mapping) if i == 0 or index != mapping[i - 1]]
+    duplicates = [(i, index) for i, index in enumerate(mapping) if i > 0 and index == mapping[i - 1]]
+    diagnostic = f"{context}; source frame mapping={mapping}; duplicates={duplicates}; max MAE={max(errors, default=0)}"
+    assert sequence == expected, diagnostic
+    assert len(duplicates) <= max_duplicates, diagnostic
+    assert max(errors) < 8, diagnostic
+    return len(actual_frames)
 
 
 @pytest.fixture(params=[False, True], ids=["silent", "audio"])
@@ -171,10 +200,23 @@ def test_fractional_end_survives_import_analysis_save_reopen_render_and_preview(
 
     monkeypatch.setattr(preview, "_downscale_video", inspect_proxy)
     original_bytes = Path(info["path"]).read_bytes()
-    for pipeline in ("cut", "render", "preview"):
+    source_frames = _decoded_frames(source)
+    assert len(source_frames) == 300
+    retained_frames = list(range(30, 90)) + list(range(150, 300))
+    for pipeline in ("cut", "render", "preview", "cfr-export"):
         output = tmp_path / f"fractional-{pipeline}.mp4"
         if pipeline == "cut":
             apply_cuts(info["path"], plan.operations, str(output))
+        elif pipeline == "cfr-export":
+            # FFmpeg 6.1 defaults MP4 to CFR; FFmpeg 8 permits VFR. Force the
+            # older export mode too, so both behaviors are exercised on macOS
+            # and Ubuntu. AAC segment padding leaves a sub-frame timestamp gap
+            # which CFR fills by repeating a retained frame (never new footage).
+            subprocess.run([
+                "ffmpeg", "-v", "error", "-y", "-i", str(tmp_path / "fractional-cut.mp4"),
+                "-fps_mode", "cfr", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                "-c:a", "aac", str(output),
+            ], check=True, capture_output=True, timeout=30)
         else:
             job_id = server._create_job(pipeline)
             if pipeline == "render":
@@ -192,12 +234,19 @@ def test_fractional_end_survives_import_analysis_save_reopen_render_and_preview(
             "ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", str(output),
         ], check=True, capture_output=True, text=True, timeout=30).stdout)
         video = next(stream for stream in metadata["streams"] if stream["codec_type"] == "video")
-        assert int(video["nb_frames"]) == 210
-        assert abs(float(metadata["format"]["duration"]) - plan.estimated_duration) < 0.15
-        assert any(stream["codec_type"] == "audio" for stream in metadata["streams"])
-        expected, actual = _frame(source, 299), _frame(output, 209)
-        assert len(expected) == len(actual) == 160 * 90 * 3
-        assert sum(abs(a - b) for a, b in zip(actual, expected, strict=True)) / len(actual) < 8
+        context = f"pipeline={pipeline}; video={video}; duration={metadata['format']['duration']}"
+        max_duplicates = 1 if pipeline in ("render", "cfr-export") else 0
+        frame_count = _assert_retained_frame_sequence(
+            source_frames, output, retained_frames, max_duplicates, context,
+        )
+        assert int(video["nb_frames"]) == frame_count, context
+        if pipeline == "cfr-export":
+            assert frame_count == 211, context  # Prove the duplicate-frame branch runs.
+        assert abs(float(metadata["format"]["duration"]) - plan.estimated_duration) < 0.15, context
+        assert any(stream["codec_type"] == "audio" for stream in metadata["streams"]), context
+        expected, actual = _frame(source, 299), _frame(output, frame_count - 1)
+        assert len(expected) == len(actual) == 160 * 90 * 3, context
+        assert sum(abs(a - b) for a, b in zip(actual, expected, strict=True)) / len(actual) < 8, context
     assert proxy_durations and proxy_durations[0] != raw_duration
     assert Path(info["path"]).read_bytes() == original_bytes
 
