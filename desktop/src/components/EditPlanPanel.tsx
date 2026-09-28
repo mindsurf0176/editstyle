@@ -133,7 +133,7 @@ export default function EditPlanPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex min-h-full flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-sm font-medium text-text-primary">Edit Plan</h3>
         <Button 
@@ -141,72 +141,79 @@ export default function EditPlanPanel() {
           size="sm" 
           onClick={() => dispatch({ type: 'CLEAR_EDIT_PLAN' })}
           disabled={busy}
-          className="h-6 px-2 text-xs text-text-secondary hover:text-accent hover:bg-accent/10"
+          className="h-8 px-2 text-ui text-text-secondary hover:text-text-primary hover:bg-bg-surface"
         >
           Clear
         </Button>
       </div>
 
-      <div className="px-4 py-3 text-xs text-text-secondary border-b border-border">
-        <p className="italic">"{editPlan.instruction}"</p>
+      <div className="px-4 py-3 text-ui text-text-secondary border-b border-border">
+        <p className="break-words">{editPlan.instruction}</p>
         <p className="mt-1 text-text-muted">
           Estimated output: {formatTime(editPlan.estimated_duration)}
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="shrink-0">
         {editPlan.operations.map((op, index) => {
           const Icon = OPERATION_ICONS[op.type] ?? Scissors;
+          const selected = state.timelineSelection.type === 'operation' && state.timelineSelection.operation_index === index;
           return (
             <div
               key={index}
-              className="flex items-center gap-3 px-4 py-3 border-b border-border/50 group hover:bg-bg-panel/80 transition-colors"
+              className={`flex items-center gap-2 border-b border-border px-3 py-2 ${selected ? 'bg-bg-surface border-l-2 border-l-accent' : ''}`}
             >
-              <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center flex-shrink-0">
-                <Icon size={14} className="text-text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium capitalize text-text-secondary">
+              <button type="button" aria-pressed={selected}
+                aria-label={`Select operation ${index + 1}`}
+                onClick={() => dispatch({ type: 'SET_TIMELINE_SELECTION', selection: { type: 'operation', operation_index: index } })}
+                className="flex min-h-9 min-w-0 flex-1 items-start gap-2 rounded py-1 text-left">
+                <Icon size={15} className="mt-0.5 shrink-0 text-text-secondary" />
+                <span className="min-w-0">
+                <span className="block text-ui font-medium capitalize text-text-primary">
                   {op.type === 'cut' ? `Cut · ${String(op.action ?? '')}` : op.type}
-                </p>
+                </span>
                 {(op.description || op.reason || operationDetail(op)) && (
-                  <p className="text-[11px] text-text-muted truncate">
+                  <span className="block text-xs text-text-muted break-words">
                     {op.description || op.reason || operationDetail(op)}
-                  </p>
+                  </span>
                 )}
                 {op.start_time !== undefined && op.end_time !== undefined && (
-                  <p className="text-[10px] text-text-muted tabular-nums">
+                  <span className="block text-xs timecode text-text-secondary">
                     {formatTime(op.start_time)} → {formatTime(op.end_time)}
-                  </p>
+                  </span>
                 )}
-              </div>
+                </span>
+              </button>
               <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => dispatch({ type: 'REMOVE_OPERATION', index })}
                 aria-label={`Remove operation ${index + 1}`}
                 disabled={busy}
-                className="p-1 rounded hover:bg-accent/10 transition-all"
+                className="h-8 w-8 shrink-0 rounded text-text-secondary hover:bg-bg-elevated hover:text-error transition-colors"
               >
-                <Trash2 size={12} className="text-accent" />
+                <Trash2 size={15} />
               </Button>
             </div>
           );
         })}
         {editPlan.operations.length === 0 && (
           <div className="flex items-center justify-center h-20 text-xs text-text-muted">
-            No operations — add instructions below
+            Select a source range or add an instruction.
           </div>
         )}
       </div>
 
-      <div className="border-t border-border px-4 py-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mt-auto border-t border-border px-4 py-3">
+        <h3 className="mb-3 text-sm font-medium text-text-primary">Preview & render</h3>
+        <div className="mb-4 flex flex-col gap-2">
           <div>
-            <p className="text-xs font-medium text-text-primary">Preview quality</p>
-            <p className="text-[11px] text-text-muted">
+            <p className="text-ui font-medium text-text-primary">Preview quality</p>
+            <p className="text-xs text-text-muted">
               Lower resolutions generate faster.
             </p>
           </div>
-          <div className="inline-flex rounded-lg border border-border bg-bg-elevated p-1">
+          <div className="flex rounded-md border border-border bg-bg-base p-1" role="group" aria-label="Preview quality">
             {PREVIEW_RESOLUTIONS.map((resolution) => {
               const selected = previewResolution === resolution;
 
@@ -214,12 +221,14 @@ export default function EditPlanPanel() {
                 <Button
                   key={resolution}
                   type="button"
+                  variant="secondary"
+                  aria-pressed={selected}
                   onClick={() => dispatch({ type: 'SET_PREVIEW_RESOLUTION', resolution })}
                   disabled={busy}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`h-8 flex-1 rounded px-2 text-ui font-medium transition-colors ${
                     selected
-                      ? 'bg-accent text-text-primary'
-                      : 'text-text-muted hover:text-text-primary'
+                      ? 'bg-accent text-on-accent hover:bg-accent-hover'
+                      : 'bg-transparent text-text-secondary hover:bg-bg-surface hover:text-text-primary'
                   } disabled:cursor-not-allowed disabled:opacity-40`}
                 >
                   {resolution}p
@@ -229,15 +238,15 @@ export default function EditPlanPanel() {
           </div>
         </div>
 
-        <div className="mb-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="mb-4">
+          <div className="mb-2 flex flex-col gap-2">
             <div>
-              <p className="text-xs font-medium text-text-primary">Render quality</p>
-              <p className="text-[11px] text-text-muted">
+              <p className="text-ui font-medium text-text-primary">Render quality</p>
+              <p className="text-xs text-text-muted">
                 {selectedRenderPreset.description}
               </p>
             </div>
-            <div className="inline-flex rounded-lg border border-border bg-bg-elevated p-1">
+            <div className="flex rounded-md border border-border bg-bg-base p-1" role="group" aria-label="Render quality">
               {RENDER_PRESET_OPTIONS.map((preset) => {
                 const selected = renderPreset === preset.value;
 
@@ -245,12 +254,14 @@ export default function EditPlanPanel() {
                   <Button
                     key={preset.value}
                     type="button"
+                    variant="secondary"
+                    aria-pressed={selected}
                     onClick={() => dispatch({ type: 'SET_RENDER_PRESET', renderPreset: preset.value })}
                     disabled={busy}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    className={`h-8 flex-1 rounded px-2 text-ui font-medium transition-colors ${
                       selected
-                        ? 'bg-accent text-text-primary'
-                        : 'text-text-muted hover:text-text-primary'
+                        ? 'bg-accent text-on-accent hover:bg-accent-hover'
+                        : 'bg-transparent text-text-secondary hover:bg-bg-surface hover:text-text-primary'
                     } disabled:cursor-not-allowed disabled:opacity-40`}
                   >
                     {preset.label}
@@ -266,7 +277,7 @@ export default function EditPlanPanel() {
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-medium text-text-primary">Subtitle export</p>
-                <p className="text-[11px] text-text-muted">
+                <p className="text-xs text-text-muted">
                   {selectedSubtitleExportMode.description}
                 </p>
               </div>
@@ -279,21 +290,23 @@ export default function EditPlanPanel() {
                   <Button
                     key={option.value}
                     type="button"
+                    variant="secondary"
+                    aria-pressed={selected}
                     onClick={() => dispatch({
                       type: 'SET_SUBTITLE_EXPORT_MODE',
                       subtitleExportMode: option.value,
                     })}
                     disabled={busy}
-                    className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                    className={`h-auto min-h-9 flex-col items-start gap-0 whitespace-normal rounded-md border px-3 py-2 text-left transition-colors ${
                       selected
-                        ? 'border-accent bg-accent/20'
-                        : 'border-border bg-bg-elevated hover:border-accent'
+                        ? 'border-border-strong bg-bg-elevated'
+                        : 'border-border bg-bg-surface hover:border-border-strong'
                     } disabled:cursor-not-allowed disabled:opacity-40`}
                   >
-                    <p className="text-xs font-medium text-text-primary">{option.label}</p>
-                    <p className="mt-0.5 text-[11px] text-text-muted">
+                    <span className="text-ui font-medium text-text-primary">{option.label}</span>
+                    <span className="mt-0.5 text-xs text-text-muted">
                       {option.description}
-                    </p>
+                    </span>
                   </Button>
                 );
               })}
@@ -303,10 +316,11 @@ export default function EditPlanPanel() {
 
         <div className="flex flex-col gap-2">
           <Button
+            variant="secondary"
             onClick={handlePreview}
             disabled={!canPreview}
             title={!canPreview ? validationMessage ?? 'Preview is already running' : undefined}
-            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg
+            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md
               bg-bg-elevated text-text-primary text-sm font-medium
               hover:bg-bg-panel
               disabled:opacity-40 disabled:cursor-not-allowed
@@ -325,9 +339,9 @@ export default function EditPlanPanel() {
             onClick={handleRender}
             disabled={!canRender}
             title={!canRender ? validationMessage ?? 'Render is already running' : undefined}
-            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg
-              bg-accent text-text-primary text-sm font-medium
-              hover:bg-accent/90
+            className="w-full min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md
+              bg-accent text-on-accent text-ui font-medium
+              hover:bg-accent-hover
               disabled:opacity-40 disabled:cursor-not-allowed
               transition-colors"
           >
@@ -337,9 +351,10 @@ export default function EditPlanPanel() {
             </span>
           </Button>
         </div>
+        <p className="mt-3 text-xs text-text-muted">Your plan saves automatically. Render the video, then export a file from the viewer.</p>
       </div>
       {validationMessage && (
-        <div className="px-4 pb-3 text-[11px] text-text-muted">
+        <div className="px-4 pb-3 text-xs text-text-muted">
           {validationMessage}
         </div>
       )}

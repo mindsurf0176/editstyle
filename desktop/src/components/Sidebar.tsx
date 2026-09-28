@@ -39,7 +39,7 @@ export default function Sidebar() {
               className={`
                 w-12 h-12 flex flex-col items-center justify-center gap-1 rounded-lg transition-all duration-150
                 ${active
-                  ? 'bg-accent text-white'
+                  ? 'bg-accent text-on-accent'
                   : 'text-text-muted hover:text-text-secondary hover:bg-bg-surface'
                 }
                 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}

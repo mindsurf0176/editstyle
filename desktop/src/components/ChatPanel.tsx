@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Scissors, Subtitles, Clapperboard, Wand2, RefreshCw } from 'lucide-react';
+import { Send, Upload, Scissors, Subtitles, Clapperboard, Wand2, RefreshCw, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useApp } from '../store';
 import { createPlan, uploadVideo, getVideoInfo, analyzeVideo } from '../api';
 import { useProjectControls } from '../useProjectPersistence';
@@ -21,9 +21,11 @@ const SUGGESTIONS = [
 interface ChatPanelProps {
   onRetryBackend: () => void;
   retryingBackend: boolean;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
-export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanelProps) {
+export default function ChatPanel({ onRetryBackend, retryingBackend, collapsed = false, onToggle }: ChatPanelProps) {
   const { state, dispatch } = useApp();
   const project = useProjectControls();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,6 +36,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
   revisionRef.current = state.editRevision;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const jobBusy = state.activeJob?.status === 'running' || state.activeJob?.status === 'pending';
   const busy = loading || uploading || jobBusy || Boolean(project && (!project.ready || project.transitioning));
   const sourceAvailable = state.mediaStatus !== 'missing';
@@ -41,8 +44,10 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
   useEffect(() => { setMessages([]); setInput(''); }, [state.videoId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-  }, [messages]);
+    if (collapsed) return;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    messagesEndRef.current?.scrollIntoView?.({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'nearest' });
+  }, [messages, collapsed]);
 
   const addMessage = (role: ChatMessage['role'], content: string) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, content, timestamp: new Date() }]);
@@ -134,67 +139,83 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="w-[340px] flex flex-col bg-bg-panel border-r border-border flex-shrink-0 h-full">
+    <aside aria-label="AI instructions" className={`${collapsed ? 'w-12' : 'w-[260px]'} flex flex-col bg-bg-panel border-r border-border flex-shrink-0 min-h-0`}>
       {/* Header */}
-      <div className="h-14 flex items-center justify-between px-5 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="CutAI" className="w-7 h-7 rounded-lg" />
-          <span className="text-sm font-bold text-text-primary tracking-tight">CutAI</span>
-        </div>
-        {state.backendStatus !== 'online' && (
-          <button onClick={onRetryBackend} disabled={retryingBackend} className="flex items-center gap-1.5 text-[11px] text-warning font-medium hover:text-text-primary transition-colors">
-            <RefreshCw size={11} className={retryingBackend ? 'animate-spin' : ''} />
-            {retryingBackend ? 'Connecting...' : 'Offline'}
-          </button>
-        )}
+      <div className={`h-12 flex items-center ${collapsed ? 'justify-center' : 'justify-between px-3'} border-b border-border flex-shrink-0`}>
+        {!collapsed ? <h2 className="text-ui font-medium text-text-primary">AI instructions</h2> : null}
+        <button ref={toggleRef} type="button" onClick={() => { onToggle?.(); toggleRef.current?.focus(); }}
+          aria-label={collapsed ? 'Expand AI instructions' : 'Collapse AI instructions'}
+          aria-expanded={!collapsed} aria-controls="ai-instructions-content"
+          title={collapsed ? 'Expand AI instructions' : 'Collapse AI instructions'}
+          className="h-8 w-8 flex items-center justify-center rounded text-text-secondary hover:bg-bg-surface hover:text-text-primary transition-colors">
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
       </div>
+      {collapsed ? <div className="flex flex-col items-center gap-3 py-3">
+        <span className="text-xs font-medium text-text-secondary">AI</span>
+        <button type="button" aria-label="Import video" title="Import video"
+          onClick={() => fileInputRef.current?.click()} disabled={busy || !state.backendOnline}
+          className="h-8 w-8 flex items-center justify-center rounded text-text-secondary hover:bg-bg-surface disabled:opacity-40"><Upload size={17} /></button>
+      </div> : null}
 
-      <div className="px-5 py-3 border-b border-border text-[11px] text-text-muted space-y-2">
-        <p>Local rules mode · no language model request</p>
-        <p>Plans and undo history are saved. Chat messages clear when you reopen or switch projects.</p>
-        <label className="flex items-start gap-2">
-          <input type="checkbox" checked={state.transcribeOnImport} disabled={busy}
-            onChange={(event) => dispatch({ type: 'SET_TRANSCRIBE_ON_IMPORT', enabled: event.target.checked })} />
-          <span>Transcribe speech on import (requires Whisper and a model download). Needed for subtitles.</span>
-        </label>
-        {!state.transcribeOnImport ? <p>Scenes, cuts and preview work without transcription.</p> : null}
-        {state.backendError ? <p role="status">{state.backendError}</p> : null}
-        {state.videoId && !state.analysis ? <button type="button" onClick={() => { void retryAnalysis(); }}
-          disabled={busy || !sourceAvailable || !state.backendOnline}
-          className="text-accent disabled:opacity-40">Retry analysis</button> : null}
-      </div>
+      <div id="ai-instructions-content" hidden={collapsed} inert={collapsed || undefined}
+        className={collapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <div className="mb-5 space-y-2 text-xs text-text-muted">
+          <p>Local rules mode · no language model request</p>
+          {state.backendStatus !== 'online' ? <button onClick={onRetryBackend} disabled={retryingBackend}
+            className="flex min-h-8 items-center gap-2 text-ui text-warning hover:text-text-primary transition-colors">
+            <RefreshCw size={14} className={retryingBackend ? 'animate-spin' : ''} />
+            {retryingBackend ? 'Connecting…' : 'Reconnect backend'}
+          </button> : null}
+          {state.backendError ? <p role="status" className="break-words">{state.backendError}</p> : null}
+          <details>
+            <summary className="min-h-8 cursor-pointer py-1 text-ui text-text-secondary">Import & chat settings</summary>
+            <div className="mt-2 space-y-3">
+              <label className="flex items-start gap-2">
+                <input type="checkbox" checked={state.transcribeOnImport} disabled={busy} className="mt-0.5"
+                  onChange={(event) => dispatch({ type: 'SET_TRANSCRIBE_ON_IMPORT', enabled: event.target.checked })} />
+                <span>Transcribe speech on import (requires Whisper and a model download). Needed for subtitles.</span>
+              </label>
+              {!state.transcribeOnImport ? <p>Scenes, cuts and preview work without transcription.</p> : null}
+              <p>Plans and undo history are saved. Chat messages clear when you reopen or switch projects.</p>
+            </div>
+          </details>
+          {state.videoId && !state.analysis ? <button type="button" onClick={() => { void retryAnalysis(); }}
+            disabled={busy || !sourceAvailable || !state.backendOnline}
+            className="min-h-8 text-ui text-accent disabled:opacity-40">Retry analysis</button> : null}
+        </div>
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full gap-6">
-            <div className="text-center">
-              <h2 className="text-lg font-bold text-text-primary mb-2">What do you want to edit?</h2>
+          <div className="flex flex-col gap-4">
+            <div>
+              <h3 className="text-base font-medium text-text-primary mb-2">{state.videoId ? 'What should change?' : 'Start with a video'}</h3>
               <p className="text-sm text-text-secondary leading-relaxed">
-                Drop a video and tell me what to do.<br />
-                Review the plan, then preview and export.
+                {state.videoId ? 'Choose a source range or describe an edit. Review the plan before previewing and exporting.'
+                  : 'Import a local video, then describe the edit you want.'}
               </p>
             </div>
 
             {/* Upload button */}
-            <button
+            {!state.videoId ? <button
               onClick={() => fileInputRef.current?.click()}
               disabled={busy || !state.backendOnline}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent text-white font-semibold text-sm hover:bg-accent-hover transition-colors"
+              className="flex min-h-9 items-center justify-center gap-2 px-4 py-2 rounded-md bg-accent text-on-accent font-medium text-ui hover:bg-accent-hover transition-colors disabled:opacity-40"
             >
               <Upload size={16} />
               Import Video
-            </button>
+            </button> : null}
 
             {/* Suggestions */}
-            <div className="w-full space-y-2 mt-2">
-              <p className="text-[11px] text-text-muted font-medium uppercase tracking-wider px-1">Try saying</p>
+            <div className="w-full space-y-1 mt-2">
+              <p className="text-xs text-text-muted font-medium mb-2">Try an instruction</p>
               {SUGGESTIONS.map(({ icon: Icon, text }) => (
                 <button
                   key={text}
                   onClick={() => handleSend(text)}
                   disabled={!state.analysis || busy || !sourceAvailable || !state.backendOnline}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-surface border border-border text-sm text-text-secondary hover:text-text-primary hover:border-border-strong transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full flex min-h-9 items-center gap-2 px-2 py-2 rounded-md text-ui text-text-secondary hover:bg-bg-surface hover:text-text-primary transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Icon size={14} className="text-accent flex-shrink-0" />
                   {text}
@@ -206,9 +227,9 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
           <div className="space-y-4">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] px-4 py-2.5 rounded-lg text-sm leading-relaxed whitespace-pre-wrap ${
+                <div className={`min-w-0 max-w-full break-words px-3 py-2 rounded-md text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
-                    ? 'bg-accent text-white rounded-br-sm'
+                    ? 'bg-bg-elevated text-text-primary rounded-br-sm'
                     : msg.role === 'system'
                     ? 'bg-bg-surface text-text-muted text-xs border border-border'
                     : 'bg-bg-surface text-text-primary border border-border rounded-bl-sm'
@@ -219,13 +240,7 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="px-4 py-3 rounded-lg bg-bg-surface border border-border">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
+                <p role="status" className="px-3 py-2 text-xs text-text-secondary">Building edit plan…</p>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -234,40 +249,43 @@ export default function ChatPanel({ onRetryBackend, retryingBackend }: ChatPanel
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 border-t border-border flex-shrink-0">
-        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center gap-2">
+      <div className="px-3 py-3 border-t border-border flex-shrink-0">
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex flex-wrap items-center gap-2">
+          <label htmlFor="editing-instruction" className="sr-only">Editing instruction</label>
+          <input
+            id="editing-instruction"
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={state.videoId ? 'Describe an edit…' : 'Import a video first…'}
+            className="w-full min-w-0 h-9 px-3 rounded-md bg-bg-surface border border-border-strong text-ui text-text-primary placeholder:text-text-muted transition-colors"
+          />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy || !state.backendOnline}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-text-muted hover:text-text-secondary hover:bg-bg-surface transition-colors flex-shrink-0"
+            className="min-h-8 flex items-center gap-2 rounded px-2 text-ui text-text-secondary hover:bg-bg-surface transition-colors disabled:opacity-40"
             title="Import video"
             aria-label="Import video"
           >
-            <Upload size={18} />
+            <Upload size={15} /> Import
           </button>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={state.videoId ? 'Tell me what to edit...' : 'Import a video first...'}
-            className="flex-1 h-10 px-4 rounded-lg bg-bg-surface border border-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/50 transition-colors"
-          />
           <button
             type="submit"
             disabled={!input.trim() || busy || !state.analysis || !state.backendOnline || !sourceAvailable}
             aria-label="Send editing instruction"
-            className="w-10 h-10 flex items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className="ml-auto min-h-8 flex items-center gap-2 px-3 rounded-md bg-accent text-on-accent text-ui hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            <Send size={16} />
+            <Send size={14} /> Send
           </button>
         </form>
+      </div>
       </div>
 
       <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => {
         const file = e.target.files?.[0];
         if (file) handleUpload(file);
       }} />
-    </div>
+    </aside>
   );
 }

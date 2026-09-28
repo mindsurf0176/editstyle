@@ -328,14 +328,14 @@ export default function JobProgress() {
   }[activeJob.status];
 
   const statusColor = {
-    pending: 'text-[#a1a1aa]',
-    running: 'text-[#ffffff]',
-    completed: 'text-[var(--success)]',
-    failed: 'text-[var(--error)]',
+    pending: 'text-text-secondary',
+    running: 'text-text-primary',
+    completed: 'text-success',
+    failed: 'text-error',
   }[activeJob.status];
 
   return (
-    <div className="fixed bottom-20 right-6 z-50 w-80 bg-[#09090b] border border-[#27272a] rounded-md shadow-sm overflow-hidden animate-in slide-in-from-bottom-4">
+    <div className="fixed bottom-4 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100vh-5rem)] overflow-y-auto bg-bg-panel border border-border-strong rounded-md animate-in slide-in-from-bottom-4">
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           <StatusIcon
@@ -345,10 +345,11 @@ export default function JobProgress() {
           <span className="text-sm font-medium truncate">{statusText}</span>
         </div>
         <button
+          aria-label="Dismiss job status"
           onClick={() => dispatch({ type: 'CLEAR_JOB' })}
-          className="p-1 rounded hover:bg-[#18181b] transition-colors"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded hover:bg-bg-surface transition-colors"
         >
-          <X size={14} className="text-[#a1a1aa]" />
+          <X size={14} className="text-text-secondary" />
         </button>
       </div>
 
@@ -357,23 +358,23 @@ export default function JobProgress() {
           <p role="alert" className="text-xs text-text-secondary">{activeJob.error}</p>
         ) : null}
         <Progress.Root
-          className="relative w-full h-1.5 overflow-hidden rounded-full bg-[#000000]"
+          className="relative w-full h-1.5 overflow-hidden rounded-full bg-bg-base"
           value={activeJob.progress}
         >
           <Progress.Indicator
             className={`h-full rounded-full transition-[width] duration-500 ease-out ${
               activeJob.status === 'completed'
-                ? 'bg-[var(--success)]'
+                ? 'bg-success'
                 : activeJob.status === 'failed'
-                  ? 'bg-[var(--error)]'
-                  : 'bg-[#ffffff]'
+                  ? 'bg-error'
+                  : 'bg-accent'
             }`}
             style={{ width: `${activeJob.status === 'completed' ? 100 : activeJob.progress}%` }}
           />
         </Progress.Root>
 
         {activeJob.type && (
-          <p className="text-[11px] text-[#a1a1aa] capitalize">
+          <p className="text-xs text-text-secondary capitalize">
             {activeJob.type.replace('_', ' ')} job
           </p>
         )}
@@ -392,11 +393,11 @@ export default function JobProgress() {
         {hasPreviewResult && (
           <div className="space-y-2">
             {previewQualityDetails && (
-              <p className="text-xs text-[#a1a1aa]">
+              <p className="text-xs text-text-secondary">
                 Output: {previewQualityDetails}
               </p>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() =>
                   void openPathOrUrl(
@@ -404,7 +405,7 @@ export default function JobProgress() {
                     getPreviewDownloadUrl(activeJob.job_id)
                   )
                 }
-                className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg border border-[#27272a] text-sm font-medium text-[#fafafa] hover:bg-[#18181b] transition-colors"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md border border-border-strong text-ui font-medium text-text-primary hover:bg-bg-surface transition-colors"
               >
                 <ExternalLink size={14} />
                 {nativeDesktop ? 'Open preview' : 'Open file'}
@@ -418,7 +419,7 @@ export default function JobProgress() {
                       getPreviewDownloadUrl(activeJob.job_id)
                     )
                   }
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md bg-accent text-on-accent text-sm font-medium hover:bg-accent-hover transition-colors"
                 >
                   <Download size={14} />
                   Save preview as
@@ -428,7 +429,7 @@ export default function JobProgress() {
                   href={getPreviewDownloadUrl(activeJob.job_id)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md bg-accent text-on-accent text-sm font-medium hover:bg-accent-hover transition-colors"
                 >
                   <Download size={14} />
                   Download preview
@@ -441,19 +442,19 @@ export default function JobProgress() {
         {hasRenderResult && (
           <div className="space-y-2">
             {renderQualityDetails && (
-              <p className="text-xs text-[#a1a1aa]">
+              <p className="text-xs text-text-secondary">
                 Output: {renderQualityDetails}
               </p>
             )}
             {renderResultData?.subtitle_path && (
               <p
-                className="truncate text-xs text-[#a1a1aa]"
+                className="truncate text-xs text-text-secondary"
                 title={renderResultData.subtitle_path}
               >
                 Subtitle file: {renderResultData.subtitle_path}
               </p>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() =>
                   void openPathOrUrl(
@@ -461,7 +462,7 @@ export default function JobProgress() {
                     getDownloadUrl(activeJob.job_id)
                   )
                 }
-                className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg border border-[#27272a] text-sm font-medium text-[#fafafa] hover:bg-[#18181b] transition-colors"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md border border-border-strong text-ui font-medium text-text-primary hover:bg-bg-surface transition-colors"
               >
                 <ExternalLink size={14} />
                 {nativeDesktop ? 'Open render' : 'Open file'}
@@ -475,7 +476,7 @@ export default function JobProgress() {
                       getDownloadUrl(activeJob.job_id)
                     )
                   }
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md bg-accent text-on-accent text-sm font-medium hover:bg-accent-hover transition-colors"
                 >
                   <Download size={14} />
                   Export render
@@ -485,7 +486,7 @@ export default function JobProgress() {
                   href={getDownloadUrl(activeJob.job_id)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-[#ffffff] text-[#111315] text-sm font-medium hover:bg-[#e4e4e7] transition-colors"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-md bg-accent text-on-accent text-sm font-medium hover:bg-accent-hover transition-colors"
                 >
                   <Download size={14} />
                   Download render

@@ -85,10 +85,10 @@ export default function InstructionBar() {
         <button
           type="submit"
           disabled={disabled || !instruction.trim() || loading}
-          className="h-11 px-5 rounded-lg bg-accent text-white font-semibold text-sm hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          className="h-11 px-5 rounded-lg bg-accent text-on-accent font-semibold text-sm hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
         >
           {loading ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-on-accent/30 border-t-on-accent rounded-full animate-spin" />
           ) : (
             <Send size={16} />
           )}

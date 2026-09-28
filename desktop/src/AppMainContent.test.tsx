@@ -120,6 +120,7 @@ describe('AppMainContent desktop style flow', () => {
     getPresetsMock.mockReset();
     getPresetMock.mockReset();
     applyStyleMock.mockReset();
+    vi.unstubAllGlobals();
 
     if (root) {
       await act(async () => {
@@ -128,6 +129,58 @@ describe('AppMainContent desktop style flow', () => {
     }
 
     container?.remove();
+  });
+
+  it('keeps an instruction draft mounted when folded and returns focus to the toggle', async () => {
+    vi.stubGlobal('innerWidth', 1280);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<AppContext.Provider value={{ state: createState({ sidebarTab: 'edit' }), dispatch: () => undefined }}>
+        <AppMainContent onRetryBackend={() => undefined} retryingBackend={false} />
+      </AppContext.Provider>);
+    });
+    const input = container.querySelector('#editing-instruction') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Keep the opening scene');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const toggle = getButtonByLabel(container, 'Collapse AI instructions');
+    await act(async () => { toggle.click(); });
+    const panel = container.querySelector('#ai-instructions-content') as HTMLDivElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(panel.hasAttribute('inert')).toBe(true);
+    expect(document.activeElement).toBe(toggle);
+    expect(container.querySelector('#editing-instruction')).toBe(input);
+    await act(async () => { toggle.click(); });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hidden).toBe(false);
+    expect(panel.hasAttribute('inert')).toBe(false);
+    expect(input.value).toBe('Keep the opening scene');
+  });
+
+  it('starts folded in a narrow window without resetting the choice on resize', async () => {
+    vi.stubGlobal('innerWidth', 1024);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<AppContext.Provider value={{ state: createState({ sidebarTab: 'edit' }), dispatch: () => undefined }}>
+        <AppMainContent onRetryBackend={() => undefined} retryingBackend={false} />
+      </AppContext.Provider>);
+    });
+    const toggle = getButtonByLabel(container, 'Expand AI instructions');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => { toggle.click(); });
+    await act(async () => {
+      vi.stubGlobal('innerWidth', 900);
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(container.textContent).toContain('What should change?');
+    expect(container.textContent).not.toContain('Drop a video and tell me what to do.');
   });
 
   it('loads presets in the style sidebar and switches to edit after apply-now', async () => {

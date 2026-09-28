@@ -19,6 +19,7 @@ interface AppMainContentProps {
 export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainContentProps) {
   const { state, dispatch } = useApp();
   const project = useProjectControls();
+  const [instructionsCollapsed, setInstructionsCollapsed] = useState(() => window.innerWidth <= 1100);
 
   if (project && !project.ready) return <div className="flex flex-1 items-center justify-center text-sm text-text-secondary">
     {project.status === 'error' ? 'Project restoration stopped. Retry restore above to keep your saved work safe.'
@@ -28,27 +29,28 @@ export function AppMainContent({ onRetryBackend, retryingBackend }: AppMainConte
   </div>;
 
   return (
-    <div className="flex flex-1 h-full min-h-0" inert={project?.transitioning || project?.recoveryRequired || undefined}>
+    <div className="flex flex-1 min-w-0 min-h-0" inert={project?.transitioning || project?.recoveryRequired || undefined}>
       {/* Left: Chat Panel */}
-      <ChatPanel onRetryBackend={onRetryBackend} retryingBackend={retryingBackend} />
+      <ChatPanel onRetryBackend={onRetryBackend} retryingBackend={retryingBackend}
+        collapsed={instructionsCollapsed} onToggle={() => setInstructionsCollapsed((collapsed) => !collapsed)} />
 
       {/* Right: Video Canvas */}
-      {state.mediaStatus === 'missing' ? <div className="flex-1 flex items-center justify-center p-4 text-sm text-text-secondary">
+      {state.mediaStatus === 'missing' ? <div className="min-w-0 flex-1 flex items-center justify-center p-4 text-sm text-text-secondary">
         {state.videoInfo?.original_name} · Source unavailable
-      </div> : <CanvasPanel />}
+      </div> : <CanvasPanel onOpenInstructions={() => setInstructionsCollapsed(false)} />}
       {state.videoId ? (
-        <aside className="w-80 flex-shrink-0 border-l border-border bg-bg-panel flex flex-col min-h-0" aria-label="Editing tools">
-          <nav className="flex border-b border-border p-2 gap-2" aria-label="Editing panels">
+        <aside className="w-[280px] flex-shrink-0 border-l border-border bg-bg-panel flex flex-col min-h-0" aria-label="Editing tools">
+          <nav className="flex border-b border-border p-2 gap-1 shrink-0" aria-label="Editing panels">
             {(['edit', 'style', 'highlights'] as const).map((tab) => (
               <button key={tab} type="button" aria-pressed={state.sidebarTab === tab}
                 onClick={() => dispatch({ type: 'SET_SIDEBAR_TAB', tab })}
-                className="px-2 py-1 text-xs capitalize text-text-secondary aria-pressed:text-accent">{tab}</button>
+                className="min-h-8 flex-1 rounded border border-transparent px-2 text-ui capitalize text-text-secondary hover:bg-bg-surface aria-pressed:border-border-strong aria-pressed:bg-bg-surface aria-pressed:text-text-primary transition-colors">{tab}</button>
             ))}
           </nav>
-          <fieldset disabled={state.mediaStatus === 'missing'} className="flex-1 min-h-0 overflow-y-auto border-0 p-0 m-0">
+          <fieldset disabled={state.mediaStatus === 'missing'} className="flex-1 min-h-0 min-w-0 overflow-y-auto border-0 p-0 m-0">
             {state.sidebarTab === 'style' ? <StylePanel /> : state.sidebarTab === 'highlights' ? <HighlightsPanel />
               : state.editPlan ? <EditPlanPanel />
-              : <p className="p-4 text-xs text-text-muted">Choose a source range below the canvas, or enter an editing instruction.</p>}
+              : <p className="p-4 text-sm text-text-secondary">Choose a source range below the canvas, or enter an editing instruction.</p>}
           </fieldset>
         </aside>
       ) : null}
@@ -109,10 +111,10 @@ export default function App() {
         <ProjectBar />
         {/* Error toast */}
         {state.error && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 bg-error/10 border border-error/20 rounded-lg text-error text-xs">
+          <div role="alert" className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100%-2rem)] items-center gap-2 px-4 py-2 bg-bg-panel border border-error rounded-md text-error text-ui">
             <AlertCircle size={12} />
             <span className="font-medium">{state.error}</span>
-            <button onClick={() => dispatch({ type: 'SET_ERROR', error: null })} className="p-0.5 rounded hover:bg-error/20 ml-1"><X size={10} /></button>
+            <button aria-label="Dismiss error" onClick={() => dispatch({ type: 'SET_ERROR', error: null })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded hover:bg-bg-surface ml-1"><X size={16} /></button>
           </div>
         )}
 

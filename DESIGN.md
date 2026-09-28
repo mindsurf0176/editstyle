@@ -1,3 +1,108 @@
+# CutAI desktop — workspace polish, 2026-09-28
+
+Scope: `desktop/src/` on `revival/cutai-editor`. The approved target is a neutral,
+video-first editing workspace with collapsible AI instructions. The companion and
+plugin design below remains a separate, unchanged scope. Keep the CutAI identity,
+English UI, editing behavior and persistence contract.
+
+## Desktop reference lock
+
+Primary: [Runway](https://runwayml.com), using the fully reviewed bundled snapshot at
+`/Users/minseo/.codex/data/references/runwayml/DESIGN.md`. This is snapshot research,
+not a live-site audit.
+Preserve its near-black canvas, neutral layered surfaces, restrained 4–8px geometry,
+400–600 sans typography, zero decorative shadows and footage-led composition.
+Its marketing display scale, generated samples and cool-slate text colors are not
+desktop requirements: use the user's real video and contrast-correct work-tool text.
+
+Secondary: the existing `App`, `ChatPanel`, `CanvasPanel` and `EditorTimeline` flow
+owns project/source/selection semantics. Refero's typography, color and craft-details
+guides supply readable small text, measured contrast, keyboard focus and native
+controls. Refero MCP is unavailable; these bundled sources are the research basis.
+Direct build was approved on 2026-09-28; no new brand discovery or generated assets.
+
+| Decision | Source and bounded role | Desktop adaptation |
+|---|---|---|
+| Neutral layered canvas | Runway surfaces and footage role | `#030303` canvas, `#1a1a1a` panels, `#262626` controls; real footage owns color |
+| Quiet chrome with clear selection | Runway geometry + user tool-state request | Small neutral fills, visible selected boundary and `aria-pressed`; no violet or glow |
+| Readable compact typography | Runway sans + Refero work-tool typography | 14px body, 13px controls, 12px metadata minimum; monospace tabular timecodes |
+| More space for footage and timeline | User brief + existing editor flow | 260px instruction panel, 280px inspector, flexible center; 48px folded AI rail |
+| Distinct save and export | User brief + existing persistence contract | Project save state stays in project bar; preview/export stay with video/output controls |
+| Explicit Keep/Remove semantics | Existing source editing + Refero color/focus craft | Preserve words and undo; green/red may support meaning, never replace labels |
+
+## Desktop tokens and contrast
+
+`desktop/src/index.css` is the implementation source. Tailwind v4 semantic utility
+names are retained; conventional component tokens alias the same values. Ratios
+below use sRGB relative luminance on opaque colors. Text values must not be faded
+with opacity when the information is required.
+
+| Utility role | Value | Use / contrast |
+|---|---|---|
+| `bg-bg-base` | `#030303` | Footage surround and application canvas |
+| `bg-bg-panel` | `#1a1a1a` | Instruction panel, inspector, timeline |
+| `bg-bg-surface` | `#262626` | Inputs and small contained controls |
+| `bg-bg-elevated` | `#303030` | Hovered neutral controls; brightest normal text surface |
+| `text-text-primary` | `#f5f5f5` | Main text; 12.11:1 on elevated, 15.96:1 on panel |
+| `text-text-secondary` | `#c4c4c4` | Supporting labels; 7.57:1 on elevated, 9.98:1 on panel |
+| `text-text-muted` | `#a7a7a7` | Metadata / placeholders; 5.49:1 on elevated, 7.23:1 on panel |
+| `border-border` | `#27272a` | Decorative panel separators only, not control identification |
+| `border-border-strong` | `#808080` | Input/selected control boundary; 3.34:1 on elevated, 4.41:1 on panel |
+| `bg-accent` / `hover:bg-accent-hover` | `#eeeeee` / `#ffffff` | Restrained primary action or active tool |
+| `text-on-accent` | `#141414` | Required foreground on solid accent; 15.88:1 on accent |
+| `outline-focus` / `ring-focus` | `#eeeeee` | Keyboard focus; 11.38:1 against elevated |
+| `text-success` / `text-warning` / `text-error` | `#34d399` / `#fbbf24` / `#f87171` | Status, Keep/Remove only; 6.87 / 7.91 / 4.77:1 on elevated |
+
+For tinted semantic backgrounds, verify the actual composite. Solid semantic fills
+use dark text (`text-bg-base`); error text must not sit on a solid error fill.
+White or primary text on `bg-accent` fails: migrate existing consumers explicitly
+to `text-on-accent`. Do not patch this with global selector overrides.
+
+## Desktop typography, composition and states
+
+Keep the existing Inter/system sans and local monospace fallback stacks; no font
+download. Use `text-sm` (14px) for reading, `text-ui` (13px / 1.4) for controls,
+and `text-xs` (12px) for secondary metadata. Avoid 10/11px required text. Use weights
+400/500/600 and `tracking-wide` for uppercase labels. The `timecode` utility provides
+monospace tabular numbers without wrapping; combine with `text-xs` or `text-ui`.
+Spacing remains 4/8/12/16/24px; controls are 32–36px high, icon targets at least 32px,
+with 4/6px radii and 8px only for larger containment. No decorative cards or shadows.
+
+Use a 48–56px project bar, then three workspace columns with `min-w-0 min-h-0` on
+the flexible center and independently scrolling panel bodies. Expanded AI is 260px;
+the inspector is 280px; folded AI is a 48px rail with a labelled toggle. Keep chat
+mounted when folded, remove its hidden controls from focus, and expose `aria-expanded`
+and `aria-controls`. Collapse is local presentation state, not project data.
+
+| Viewport | Width budget before borders | Composition commitment |
+|---|---|---|
+| 1440px | 260 + 900 + 280 expanded; 48 + 1112 + 280 folded | Footage remains the largest surface |
+| 1280px | 260 + 740 + 280 expanded; 48 + 952 + 280 folded | Same density and readable controls |
+| 1024px | 260 + 484 + 280 expanded; 48 + 696 + 280 folded | Default to folded AI when space is tight; reopening remains possible |
+
+Use the full center width for the source timeline; do not put it inside a narrow
+preview card. Source/operation tracks should each provide at least 32px visible
+height, with readable labels or an adjacent selected-operation summary. Range inputs
+and Keep/Remove controls may wrap. Reserve approximately 180–220px for timeline and
+range editing; on short windows let the center scroll so all controls remain reachable.
+Maintain video aspect ratio, prevent flex clipping, and avoid horizontal page overflow.
+
+Selected tools need a neutral fill/boundary plus their existing text/icon; scene and
+operation selection need visible state beyond `aria-pressed`. Keep `Saved`, `Saving…`,
+unsaved/recovery and exported-output states truthful and separate. Existing busy,
+missing-source, recovery, stale-response and undo guards remain authoritative.
+
+Focus uses a 2px light outline with a 2px gap. Use `focus-inset` on clipped timeline
+controls; remove bare `focus:outline-none` unless a visible replacement is provided.
+Use `transition-colors` only where useful, never `transition-all`. CSS suppresses
+decorative motion under reduced motion; explicit JavaScript smooth scrolling must
+also respect that preference. Scrollbars are 8px with visible neutral thumbs.
+
+Phase 1 checks cover CSS compilation and token contrast. Rendered layouts, focus,
+fold/reopen state retention and existing interaction regressions require phase 2/3 QA.
+
+---
+
 # editstyle companion — implementation target
 
 ## Native panel extension — 2026-09-22

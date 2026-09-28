@@ -5,49 +5,77 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-bg-base: #16162b;
-  --color-bg-panel: #1c1c35;
-  --color-bg-surface: #22223d;
-  --color-bg-elevated: #2a2a4a;
-  --color-border: rgba(255, 255, 255, 0.07);
-  --color-border-strong: rgba(255, 255, 255, 0.12);
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #9494b8;
-  --color-text-muted: #5a5a7a;
+  --color-bg-base: var(--background);
+  --color-bg-panel: var(--card);
+  --color-bg-surface: var(--secondary);
+  --color-bg-elevated: var(--muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: #ffffff;
+  --color-on-accent: var(--accent-foreground);
+  --color-focus: var(--ring);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: #c4c4c4;
+  --color-text-muted: var(--muted-foreground);
   --color-success: #34d399;
   --color-warning: #fbbf24;
-  --color-error: #f87171;
+  --color-error: var(--destructive);
+
+  /* Shared aliases for the existing component primitives. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.4;
+  --text-ui--letter-spacing: 0.01em;
 }
 
 :root {
-  --background: #16162b;
-  --foreground: #e8e8f0;
-  --card: #1c1c35;
-  --card-foreground: #e8e8f0;
-  --popover: #22223d;
-  --popover-foreground: #e8e8f0;
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
-  --secondary: #22223d;
-  --secondary-foreground: #e8e8f0;
-  --muted: #2a2a4a;
-  --muted-foreground: #9494b8;
-  --accent: #6366f1;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --destructive-foreground: #fecaca;
-  --border: rgba(255, 255, 255, 0.07);
-  --input: rgba(255, 255, 255, 0.07);
-  --ring: #6366f1;
-  --radius: 0.5rem;
+  color-scheme: dark;
+  --background: #030303;
+  --foreground: #f5f5f5;
+  --card: #1a1a1a;
+  --card-foreground: var(--foreground);
+  --popover: #262626;
+  --popover-foreground: var(--foreground);
+  --primary: #eeeeee;
+  --primary-foreground: #141414;
+  --secondary: #262626;
+  --secondary-foreground: var(--foreground);
+  --muted: #303030;
+  --muted-foreground: #a7a7a7;
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --destructive: #f87171;
+  --destructive-foreground: #141414;
+  --border: #27272a;
+  --border-strong: #808080;
+  --input: var(--border-strong);
+  --ring: var(--primary);
+  --radius: 0.375rem;
+  scrollbar-color: #808080 var(--card);
+  scrollbar-width: thin;
 }
 
 body {
-  color-scheme: dark;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -64,9 +92,34 @@ body {
   width: 100vw;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: var(--focus-outline-offset, 2px);
+}
 
-::selection { background: rgba(99,102,241,0.3); color: white; }
+@utility focus-inset {
+  --focus-outline-offset: -3px;
+}
+
+@utility timecode {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--card); }
+::-webkit-scrollbar-thumb { background: #808080; border: 2px solid var(--card); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a7a7a7; }
+::-webkit-scrollbar-corner { background: var(--card); }
+
+::selection { background: var(--primary); color: var(--primary-foreground); }
+
+@media (prefers-reduced-motion: reduce) {
+  #root *, #root *::before, #root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
