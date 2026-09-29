@@ -103,6 +103,21 @@ def test_missing_source_keeps_project_and_undo(tmp_path):
     assert store.list_projects()[0]["media_status"] == "missing"
 
 
+def test_missing_playhead_defaults_and_out_of_range_is_rejected(tmp_path):
+    store = ProjectStore(tmp_path)
+    register(store)
+    legacy = editing_state().model_dump()
+    del legacy["playhead_time"]
+    saved = store.save("video", 0, ProjectEditingState.model_validate(legacy))
+    assert saved["state"]["playhead_time"] == 0
+    moved = {**saved["state"], "playhead_time": 4}
+    assert store.save("video", 1, ProjectEditingState.model_validate(moved))["state"]["playhead_time"] == 4
+    with pytest.raises(InvalidProjectState, match="Invalid playhead"):
+        store.save("video", 2, ProjectEditingState.model_validate({**moved, "playhead_time": 35.1}))
+    with pytest.raises(ValueError):
+        ProjectEditingState.model_validate({**moved, "playhead_time": float("nan")})
+
+
 @pytest.mark.parametrize("statement", [
     "PRAGMA user_version = 2",
     "UPDATE projects SET schema_version = 2",

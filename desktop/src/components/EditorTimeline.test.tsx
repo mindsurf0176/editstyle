@@ -157,11 +157,35 @@ describe('EditorTimeline', () => {
       getButtonByLabel(container, /Scene 2: 0:10 - 0:30/).click();
     });
 
-    expect(dispatchedActions).toContainEqual({ type: 'SET_CURRENT_TIME', time: 10 });
+    expect(dispatchedActions).toContainEqual({ type: 'COMMIT_PLAYHEAD', time: 10 });
     expect(dispatchedActions).toContainEqual({
       type: 'SET_TIMELINE_SELECTION',
       selection: { type: 'range', start_time: 10, end_time: 30 },
     });
+  });
+
+  it('marks the playhead as the in and out of a source range', async () => {
+    await renderTimeline(createState({
+      videoId: videoInfo.video_id, videoInfo, analysis, currentTime: 4,
+    }));
+
+    await act(async () => {
+      getButtonByLabel(container, /^Mark in$/).click();
+    });
+    expect((container.querySelector('[aria-label="Range start"]') as HTMLInputElement).value).toBe('4');
+
+    const playhead = container.querySelector('[aria-label="Source playhead"]') as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(playhead, '12');
+      playhead.dispatchEvent(new Event('input', { bubbles: true }));
+      playhead.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      getButtonByLabel(container, /^Mark out$/).click();
+    });
+    expect((container.querySelector('[aria-label="Range end"]') as HTMLInputElement).value).toBe('12');
+    expect(container.textContent).toContain('Kept 0:30 of 0:30');
   });
 
   it('renders operation bars and dispatches operation selection when clicked', async () => {

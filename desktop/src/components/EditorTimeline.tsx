@@ -1,5 +1,6 @@
 import { useApp } from '../store';
 import type { EditOperation } from '../types';
+import { getKeepRanges } from '../timeline';
 
 function formatTime(seconds: number): string {
   const safeSeconds = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
@@ -57,6 +58,14 @@ export default function EditorTimeline() {
   const selectionLabel = selectedOperation
     ? `${selectedOperation.type === 'cut' ? String(selectedOperation.action ?? 'cut') : selectedOperation.type}${selectedOperation.description ? ` · ${selectedOperation.description}` : ''}`
     : selection.type === 'range' ? 'Selected source range' : 'Full source';
+  let keptLabel = '';
+  try {
+    const kept = getKeepRanges(operations, totalDuration);
+    const keptDuration = kept.reduce((total, range) => total + range.end_time - range.start_time, 0);
+    keptLabel = `Kept ${formatTime(keptDuration)} of ${formatTime(totalDuration)}`;
+  } catch {
+    keptLabel = '';
+  }
 
   function applyRange(event: React.MouseEvent<HTMLButtonElement>, action: 'keep' | 'remove') {
     const form = event.currentTarget.form;
@@ -65,6 +74,10 @@ export default function EditorTimeline() {
     const start = String(data.get('start') ?? '').trim();
     const end = String(data.get('end') ?? '').trim();
     dispatch({ type: 'EDIT_SOURCE_RANGE', action, start: start ? Number(start) : NaN, end: end ? Number(end) : NaN });
+  }
+
+  function commitPlayhead(time: number) {
+    dispatch({ type: 'COMMIT_PLAYHEAD', time });
   }
 
   return (
@@ -100,7 +113,7 @@ export default function EditorTimeline() {
                 className="focus-inset min-w-0 h-full overflow-hidden border-r border-border-strong bg-bg-surface px-2 text-left text-xs text-text-secondary transition-colors hover:bg-bg-elevated aria-pressed:bg-accent aria-pressed:text-on-accent aria-pressed:shadow-[inset_0_0_0_2px_#eeeeee]"
                 style={{ width: `${widthPercent}%` }}
                 onClick={() => {
-                  dispatch({ type: 'SET_CURRENT_TIME', time: scene.start_time });
+                  dispatch({ type: 'COMMIT_PLAYHEAD', time: scene.start_time });
                   dispatch({
                     type: 'SET_TIMELINE_SELECTION',
                     selection: {
@@ -161,7 +174,28 @@ export default function EditorTimeline() {
         </div>
         </div>
       </div>
-      <p className="mt-2 text-xs text-text-secondary break-words"><span className="capitalize">{selectionLabel}</span> <span className="timecode">{formatTime(startTime)}–{formatTime(endTime)}</span></p>
+      <label className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
+        Playhead
+        <input
+          aria-label="Source playhead"
+          type="range"
+          min={0}
+          max={totalDuration}
+          step={0.01}
+          value={Math.min(Math.max(state.currentTime, 0), totalDuration)}
+          onChange={(event) => dispatch({ type: 'SET_CURRENT_TIME', time: Number(event.target.value) })}
+          onPointerUp={(event) => commitPlayhead(Number(event.currentTarget.value))}
+          onBlur={(event) => commitPlayhead(Number(event.currentTarget.value))}
+          onKeyUp={(event) => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+              commitPlayhead(Number(event.currentTarget.value));
+            }
+          }}
+          className="min-w-0 flex-1 accent-white"
+        />
+        <span className="timecode text-text-primary">{formatTime(state.currentTime)}</span>
+      </label>
+      <p className="mt-2 text-xs text-text-secondary break-words"><span className="capitalize">{selectionLabel}</span> <span className="timecode">{formatTime(startTime)}–{formatTime(endTime)}</span>{keptLabel ? <span> · {keptLabel}</span> : null}</p>
       <form key={`${startTime}-${endTime}`} className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => event.preventDefault()}>
         <label className="flex items-center gap-2 text-xs text-text-secondary">Start (s)
           <input aria-label="Range start" name="start" type="number" min="0" max={totalDuration} step="0.01" defaultValue={startTime}
@@ -175,8 +209,14 @@ export default function EditorTimeline() {
           className="min-h-8 rounded border border-border-strong bg-bg-surface px-3 text-ui text-text-primary hover:bg-bg-elevated disabled:opacity-40">Keep range</button>
         <button type="button" disabled={busy} onClick={(event) => applyRange(event, 'remove')}
           className="min-h-8 rounded border border-border-strong bg-bg-surface px-3 text-ui text-text-primary hover:bg-bg-elevated disabled:opacity-40">Remove range</button>
+        <button type="button" disabled={busy} onClick={() => dispatch({ type: 'MARK_PLAYHEAD_EDGE', edge: 'in' })}
+          aria-label="Mark in"
+          className="min-h-8 rounded border border-border-strong bg-bg-surface px-3 text-ui text-text-primary hover:bg-bg-elevated disabled:opacity-40">Mark in</button>
+        <button type="button" disabled={busy} onClick={() => dispatch({ type: 'MARK_PLAYHEAD_EDGE', edge: 'out' })}
+          aria-label="Mark out"
+          className="min-h-8 rounded border border-border-strong bg-bg-surface px-3 text-ui text-text-primary hover:bg-bg-elevated disabled:opacity-40">Mark out</button>
       </form>
-      <p className="mt-2 text-xs text-text-muted">Source times · Keep combines ranges. Remove excludes time from the result.</p>
+      <p className="mt-2 text-xs text-text-muted">Source times. Mark in and out from the playhead, then keep or remove that range. Playback skips removed ranges; speed and transitions stay in the rendered preview.</p>
       {state.lastCommandSummary ? <p role="status" className="mt-1 text-xs text-text-secondary">{state.lastCommandSummary.messages.join(' ')}</p> : null}
     </section>
   );

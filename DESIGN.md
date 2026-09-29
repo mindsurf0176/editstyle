@@ -85,6 +85,9 @@ preview card. Source/operation tracks should each provide at least 32px visible
 height, with readable labels or an adjacent selected-operation summary. Range inputs
 and Keep/Remove controls may wrap. Reserve approximately 180–220px for timeline and
 range editing; on short windows let the center scroll so all controls remain reachable.
+The source view plays the managed file from the same playhead. Playback can skip
+removed ranges. Speed and transitions are not applied there; they stay in the rendered
+preview. A committed playhead is project data. In/out marks are not.
 Maintain video aspect ratio, prevent flex clipping, and avoid horizontal page overflow.
 
 Selected tools need a neutral fill/boundary plus their existing text/icon; scene and

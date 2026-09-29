@@ -222,6 +222,10 @@ export function getThumbnailUrl(videoId: string, time: number = 5.0): string {
   return `${API_BASE}/api/videos/${videoId}/thumbnail?time=${time}`;
 }
 
+export function getSourceVideoUrl(videoId: string): string {
+  return `${API_BASE}/api/videos/${videoId}/media`;
+}
+
 export async function analyzeVideo(videoId: string, transcribe = false): Promise<{ job_id: string }> {
   return request<{ job_id: string }>(`/api/videos/${videoId}/analyze`, {
     method: 'POST',

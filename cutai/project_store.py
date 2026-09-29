@@ -69,6 +69,18 @@ class ProjectEditingState(BaseModel):
     subtitle_export_mode: Literal["burned", "sidecar"]
     planning_style_preset: PlanningStylePreset | None
     transcribe_on_import: bool
+    # Absent in projects saved before playback. Zero is the source start, not a new schema.
+    playhead_time: float = 0
+
+    @field_validator("playhead_time", mode="before")
+    @classmethod
+    def finite_playhead(cls, value: object) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("playhead_time must be a finite number")
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError("playhead_time must be a finite number greater than or equal to zero")
+        return number
 
     @field_serializer("planning_style_preset")
     def serialize_preset(self, value: PlanningStylePreset | None) -> dict[str, Any] | None:
@@ -127,6 +139,10 @@ def _validate_state(state: ProjectEditingState, duration: float) -> None:
                 raise InvalidProjectState(
                     f"Invalid source interval {start}–{end}; expected 0 <= start < end <= {duration}"
                 )
+    if not 0 <= state.playhead_time <= duration:
+        raise InvalidProjectState(
+            f"Invalid playhead {state.playhead_time}; expected 0 <= time <= {duration}"
+        )
     try:
         _json(state.model_dump())
     except (ValueError, TypeError) as exc:

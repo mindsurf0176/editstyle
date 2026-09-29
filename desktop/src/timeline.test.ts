@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendPlan, editSourceRange, getKeepRanges } from './timeline';
+import { appendPlan, editSourceRange, getKeepRanges, keptPlaybackStep, nextKeptTime } from './timeline';
 import type { EditOperation, EditPlan } from './types';
 
 type CutSpec = ['keep' | 'remove', number, number];
@@ -57,6 +57,21 @@ describe('source-time cut contract', () => {
   it('rejects unknown actions and missing times', () => {
     expect(() => getKeepRanges([{ type: 'cut', action: 'trim', start_time: 0, end_time: 10 }], 36)).toThrow('Cut ranges');
     expect(() => getKeepRanges([{ type: 'cut', action: 'keep', start_time: 0 }], 36)).toThrow('Cut ranges');
+  });
+
+  it('plays through kept ranges and stops after the last one', () => {
+    const ranges = getKeepRanges([
+      { type: 'cut', action: 'keep', start_time: 0, end_time: 18 },
+      { type: 'cut', action: 'remove', start_time: 6, end_time: 12 },
+    ], 36);
+    expect(ranges).toEqual([{ start_time: 0, end_time: 6 }, { start_time: 12, end_time: 18 }]);
+    expect(nextKeptTime(3, ranges)).toBe(3);
+    expect(nextKeptTime(6, ranges)).toBe(12);
+    expect(nextKeptTime(18, ranges)).toBeNull();
+    expect(keptPlaybackStep(7, ranges, false)).toEqual({ time: 7, seek: false, pause: false });
+    expect(keptPlaybackStep(7, ranges, true)).toEqual({ time: 12, seek: true, pause: false });
+    expect(keptPlaybackStep(18, ranges, true)).toEqual({ time: 18, seek: false, pause: true });
+    expect(keptPlaybackStep(4, [], true)).toEqual({ time: 4, seek: false, pause: true });
   });
 });
 

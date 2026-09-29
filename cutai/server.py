@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -446,6 +447,15 @@ async def get_thumbnail(video_id: str, time: float = Query(0.0, ge=0)) -> FileRe
         await asyncio.to_thread(_extract_thumbnail, video_path, str(thumb_path), time)
 
     return FileResponse(str(thumb_path), media_type="image/jpeg")
+
+
+@app.get("/api/videos/{video_id}/media")
+async def get_source_media(video_id: str) -> FileResponse:
+    """Stream the managed source copy. This is source playback, not a rendered edit."""
+    info = _get_video_or_404(video_id, require_media=True)
+    path = Path(info["path"]).resolve()
+    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, content_disposition_type="inline")
 
 
 # ── 2. Analysis ──────────────────────────────────────────────────────────────

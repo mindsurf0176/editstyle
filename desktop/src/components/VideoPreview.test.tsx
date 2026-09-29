@@ -215,7 +215,7 @@ describe('VideoPreview mode switching', () => {
     await act(async () => {
       getButton(container, 'Source').click();
     });
-    expect(container.querySelector('img[alt="Video frame"]')).toBeTruthy();
+    expect(container.querySelector('video')?.getAttribute('src')).toContain('/api/videos/video-1/media');
 
     await act(async () => {
       getButton(container, 'Preview').click();
@@ -226,7 +226,7 @@ describe('VideoPreview mode switching', () => {
     await act(async () => {
       holdButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
-    expect(container.querySelector('img[alt="Video frame"]')).toBeTruthy();
+    expect(container.querySelector('video')?.getAttribute('src')).toContain('/api/videos/video-1/media');
 
     await act(async () => {
       holdButton.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
@@ -257,8 +257,8 @@ describe('VideoPreview mode switching', () => {
     await act(async () => {
       getButton(container, 'Source').click();
     });
-    expect(container.querySelectorAll('video')).toHaveLength(0);
-    expect(container.querySelector('img[alt="Video frame"]')).toBeTruthy();
+    expect(container.querySelectorAll('video')).toHaveLength(1);
+    expect(container.querySelector('video')?.getAttribute('src')).toContain('/api/videos/video-1/media');
   });
 
   it('renders desktop export actions and passes suggested preview/render filenames', async () => {

@@ -26,6 +26,7 @@ import {
   startRender,
 } from '../api';
 import ExportSuccessNotice from './ExportSuccessNotice';
+import SourcePlayer from './SourcePlayer';
 import {
   formatRenderQualityDetails,
   formatSubtitleExportModeLabel,
@@ -102,6 +103,7 @@ export default function VideoPreview() {
     renderResult,
     activeJob,
     recentOutputs,
+    mediaStatus,
   } = state;
   const [displayMode, setDisplayMode] = useState<DisplayMode>('source');
   const [compareSource, setCompareSource] = useState(false);
@@ -505,7 +507,10 @@ export default function VideoPreview() {
     });
   }
 
-  function renderMediaPane(mode: DisplayMode) {
+  function renderMediaPane(mode: DisplayMode, playback = false) {
+    if (mode === 'source' && playback && mediaStatus !== 'missing') {
+      return <SourcePlayer />;
+    }
     if (mode === 'preview' && previewUrl) {
       return (
         <video
@@ -802,7 +807,7 @@ export default function VideoPreview() {
             ))}
           </div>
         ) : (
-          renderMediaPane(effectiveMode)
+          renderMediaPane(effectiveMode, true)
         )}
 
         {/* Preview mode overlay */}
@@ -820,9 +825,9 @@ export default function VideoPreview() {
                 ? 'Source compare view'
                 : effectiveMode === 'render'
                   ? 'Render playback'
-                  : effectiveMode === 'preview'
+                    : effectiveMode === 'preview'
                     ? 'Preview playback'
-                    : 'Scrub timeline to preview frames'}
+                    : 'Source playback'}
             </span>
           </div>
         </div>
@@ -861,14 +866,14 @@ export default function VideoPreview() {
               ? 'Render playback active'
               : displayMode === 'preview'
                 ? 'Preview playback active'
-                : 'Frame preview only'
+                : 'Source playback'
           }
           title={
             displayMode === 'render'
               ? 'Render playback active'
               : displayMode === 'preview'
                 ? 'Preview playback active'
-                : 'Playback is not available yet'
+                : 'Source playback'
           }
         >
           {displayMode === 'preview' || displayMode === 'render'
@@ -886,6 +891,7 @@ export default function VideoPreview() {
           max={videoInfo.duration}
           step={0.1}
           onValueChange={([val]) => dispatch({ type: 'SET_CURRENT_TIME', time: val })}
+          onValueCommit={([val]) => dispatch({ type: 'COMMIT_PLAYHEAD', time: val })}
         >
           <Slider.Track className="relative h-1 flex-1 rounded-md bg-border-strong">
             <Slider.Range className="absolute h-full rounded-md bg-accent" />

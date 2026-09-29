@@ -60,6 +60,7 @@ export interface AppState {
   backendError: string | null;
   error: string | null;
   currentTime: number;
+  playheadTime: number;
 }
 
 export const initialState: AppState = {
@@ -91,6 +92,7 @@ export const initialState: AppState = {
   backendError: null,
   error: null,
   currentTime: 0,
+  playheadTime: 0,
 };
 
 export type AppAction =
@@ -128,7 +130,28 @@ export type AppAction =
   | { type: 'SET_BACKEND_STATE'; status: BackendStatus; error?: string | null }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_CURRENT_TIME'; time: number }
+  | { type: 'COMMIT_PLAYHEAD'; time: number }
+  | { type: 'MARK_PLAYHEAD_EDGE'; edge: 'in' | 'out' }
   | { type: 'RESET' };
+
+function selectionBounds(state: AppState, duration: number): { start: number; end: number } {
+  const selection = state.timelineSelection;
+  if (selection.type === 'range') return { start: selection.start_time, end: selection.end_time };
+  if (selection.type === 'operation') {
+    const operation = state.editPlan?.operations[selection.operation_index];
+    if (operation && typeof operation.start_time === 'number' && typeof operation.end_time === 'number'
+      && operation.end_time > operation.start_time) {
+      return { start: operation.start_time, end: operation.end_time };
+    }
+  }
+  return { start: 0, end: duration };
+}
+
+function clampTime(time: number, duration: number | undefined): number {
+  if (!Number.isFinite(time)) return 0;
+  const bounded = Math.max(0, time);
+  return duration && Number.isFinite(duration) && duration > 0 ? Math.min(duration, bounded) : bounded;
+}
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -151,7 +174,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         editRevision: state.editRevision + 1,
         view: 'editor', sidebarTab: 'edit', uploadProgress: 0,
         activeJob: null, previewResult: null, renderResult: null, recentOutputs: [],
-        currentTime: 0, timelineSelection: { type: 'none' },
+        currentTime: project.state.playhead_time ?? 0,
+        playheadTime: project.state.playhead_time ?? 0,
+        timelineSelection: { type: 'none' },
         lastCommandSummary: null, error: null,
       };
     }
@@ -172,6 +197,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         editPlan: null,
         activeJob: null,
         currentTime: 0,
+        playheadTime: 0,
         timelineSelection: { type: 'none' },
         commandUndoStack: [],
         lastCommandSummary: null,
@@ -338,6 +364,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, error: action.error };
     case 'SET_CURRENT_TIME':
       return { ...state, currentTime: action.time };
+    case 'COMMIT_PLAYHEAD': {
+      const time = clampTime(action.time, state.videoInfo?.duration);
+      if (time === state.currentTime && time === state.playheadTime) return state;
+      return { ...state, currentTime: time, playheadTime: time };
+    }
+    case 'MARK_PLAYHEAD_EDGE': {
+      if (!state.videoInfo) return state;
+      const duration = state.videoInfo.duration;
+      const time = clampTime(state.currentTime, duration);
+      const bounds = selectionBounds(state, duration);
+      if (action.edge === 'in' && time >= bounds.end) {
+        return { ...state, error: 'Mark in before the current end.' };
+      }
+      if (action.edge === 'out' && time <= bounds.start) {
+        return { ...state, error: 'Mark out after the current start.' };
+      }
+      return {
+        ...state,
+        error: null,
+        currentTime: time,
+        playheadTime: time,
+        timelineSelection: action.edge === 'in'
+          ? { type: 'range', start_time: time, end_time: bounds.end }
+          : { type: 'range', start_time: bounds.start, end_time: time },
+      };
+    }
     case 'RESET':
       return {
         ...initialState,

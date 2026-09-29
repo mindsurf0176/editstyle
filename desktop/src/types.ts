@@ -168,6 +168,7 @@ export interface ProjectEditingState {
   subtitle_export_mode: SubtitleExportMode;
   planning_style_preset: Preset | null;
   transcribe_on_import: boolean;
+  playhead_time: number;
 }
 
 export interface ProjectSnapshot {

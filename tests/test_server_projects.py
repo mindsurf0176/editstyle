@@ -59,6 +59,24 @@ def test_upload_creates_project_and_lazy_restore_keeps_no_jobs(client):
     assert server.jobs == {}
 
 
+def test_source_media_streams_the_managed_file_only(client):
+    info = upload(client)
+    video_id = info["video_id"]
+    media = client.get(f"/api/videos/{video_id}/media")
+    assert media.status_code == 200
+    assert media.content == b"original source"
+    assert media.headers["accept-ranges"] == "bytes"
+    disposition = media.headers.get("content-disposition", "")
+    assert "attachment" not in disposition
+    assert info["path"] not in media.text
+    partial = client.get(f"/api/videos/{video_id}/media", headers={"Range": "bytes=0-3"})
+    assert partial.status_code == 206
+    assert partial.content == b"orig"
+    assert client.get("/api/videos/missing-video/media").status_code == 404
+    Path(info["path"]).unlink()
+    assert client.get(f"/api/videos/{video_id}/media").status_code == 409
+
+
 def test_revision_conflict_and_inactive_save_cannot_switch_pointer(client):
     one = upload(client)["video_id"]
     two = upload(client, "two.mp4")["video_id"]

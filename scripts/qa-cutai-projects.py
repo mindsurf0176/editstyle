@@ -169,6 +169,7 @@ def acceptance(source: Path, output: Path, timeout: float, report: dict) -> None
             state = {"edit_plan": plan, "undo_stack": [None, undo_plan],
                      "preview_resolution": 480, "render_preset": "draft",
                      "subtitle_export_mode": "burned", "transcribe_on_import": True,
+                     "playhead_time": 0,
                      "planning_style_preset": {"name": "QA warm", "description": "Saved planning preference",
                                                "style": {"color_grading": {"preset": "warm"}}}}
             update = {"schema_version": 1, "expected_revision": 0, "state": state}

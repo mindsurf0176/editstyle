@@ -53,6 +53,36 @@ export function getKeepRanges(operations: EditOperation[], duration: number): So
   return removes.reduce(subtractRange, base).map(({ start_time, end_time }) => ({ start_time, end_time }));
 }
 
+export function clampPlayhead(time: number, duration: number): number {
+  if (!Number.isFinite(time) || !Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.min(duration, Math.max(0, time));
+}
+
+/** Source intervals are half-open. A time on an end boundary belongs to the next kept range. */
+export function nextKeptTime(time: number, ranges: SourceRange[]): number | null {
+  if (!Number.isFinite(time)) return null;
+  for (const range of ranges) {
+    if (time >= range.start_time && time < range.end_time) return time;
+    if (time < range.start_time) return range.start_time;
+  }
+  return null;
+}
+
+export function keptPlaybackStep(
+  time: number,
+  ranges: SourceRange[],
+  playing: boolean,
+): { time: number; seek: boolean; pause: boolean } {
+  if (!playing) return { time, seek: false, pause: false };
+  if (ranges.length === 0) return { time, seek: false, pause: true };
+  const next = nextKeptTime(time, ranges);
+  if (next === null) {
+    const end = ranges[ranges.length - 1].end_time;
+    return { time: end, seek: Math.abs(end - time) > 0.0005, pause: true };
+  }
+  return { time: next, seek: Math.abs(next - time) > 0.0005, pause: false };
+}
+
 function intersectRanges(ranges: SourceRange[], selection: SourceRange[]): SourceRange[] {
   return mergeRanges(ranges.flatMap((range) => selection.flatMap((selected) => {
     const start_time = Math.max(range.start_time, selected.start_time);

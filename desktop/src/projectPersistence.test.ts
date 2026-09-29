@@ -417,4 +417,11 @@ describe('project persistence and recovery', () => {
     response.reject(Object.assign(new Error('old request fenced'), { status: 409 }));
     await saving;
   });
+
+  it('treats a project saved before playhead support as the start of the source', () => {
+    const legacy = { ...base } as ProjectEditingState;
+    delete legacy.playhead_time;
+    expect(sameEditingState(legacy, { ...base, playhead_time: 0 })).toBe(true);
+    expect(sameEditingState(legacy, { ...base, playhead_time: 4 })).toBe(false);
+  });
 });

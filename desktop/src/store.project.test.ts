@@ -26,6 +26,7 @@ describe('atomic project hydration', () => {
     expect(state.editRevision).toBe(11);
     expect(state.mediaStatus).toBe('missing');
     expect(state.currentTime).toBe(0);
+    expect(state.playheadTime).toBe(0);
     expect(state.timelineSelection).toEqual({ type: 'none' });
     expect([state.activeJob, state.previewResult, state.renderResult, state.error, state.lastCommandSummary]).toEqual([null, null, null, null, null]);
     expect(state.recentOutputs).toEqual([]);
@@ -56,5 +57,20 @@ describe('atomic project hydration', () => {
     expect(disconnected.activeJob).toBeNull();
     expect(disconnected.renderResult).toBeNull();
     expect(disconnected.editRevision).toBe(restored.editRevision + 1);
+  });
+
+  it('restores a committed playhead without saving ordinary scrubbing', () => {
+    const saved = { ...project, state: { ...project.state, playhead_time: 12.5 } };
+    const state = appReducer(initialState, { type: 'HYDRATE_PROJECT', project: saved });
+    expect(state.currentTime).toBe(12.5);
+    expect(editingState(state).playhead_time).toBe(12.5);
+    const scrubbed = appReducer(state, { type: 'SET_CURRENT_TIME', time: 3 });
+    expect(scrubbed.currentTime).toBe(3);
+    expect(editingState(scrubbed).playhead_time).toBe(12.5);
+    const committed = appReducer(scrubbed, { type: 'COMMIT_PLAYHEAD', time: 3 });
+    expect(editingState(committed).playhead_time).toBe(3);
+    const marked = appReducer(committed, { type: 'MARK_PLAYHEAD_EDGE', edge: 'out' });
+    expect(marked.timelineSelection).toEqual({ type: 'range', start_time: 0, end_time: 3 });
+    expect(appReducer(marked, { type: 'MARK_PLAYHEAD_EDGE', edge: 'in' }).error).toBe('Mark in before the current end.');
   });
 });

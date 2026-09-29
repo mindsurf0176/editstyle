@@ -21,8 +21,8 @@ Draft records have independent window/controller owners. On a new session, choos
 - `projects.sqlite3` stores one project per imported video. No migration from the old temporary upload registry is implied; import those files again.
 - `GET /api/projects/current`, `GET /api/projects`, and `GET /api/projects/{id}` read saved projects. `POST /api/projects/{id}/open` selects the active project. Saving an inactive project does not change that pointer.
 - `PUT /api/projects/{id}` takes `schema_version: 1`, `expected_revision`, and `state`. A successful SQLite transaction advances the revision; a stale revision returns HTTP 409.
-- Saved editor state includes the edit plan, up to 20 undo states, preview/render/subtitle settings, planning style preset, and transcription-on-import preference. Source metadata and completed analysis are server-owned.
-- Chat messages, playhead, selection, running jobs, preview URLs and output history are not restored. Exported media must be saved separately; completed exports are not project backups.
+- Saved editor state includes the edit plan, up to 20 undo states, preview/render/subtitle settings, planning style preset, transcription-on-import preference, and the source playhead. Source metadata and completed analysis are server-owned.
+- Chat messages, timeline selection, running jobs, preview URLs and output history are not restored. The playhead is the last position committed by pausing, releasing a scrub, or marking in/out. Playback does not save every frame. Projects saved before this field reopen at the start. Exported media must be saved separately; completed exports are not project backups.
 - Missing source files preserve the snapshot. Restore the file to its original managed location and choose **Check source again**. Relinking arbitrary replacement footage is not implemented.
 - Storage errors, malformed records and unsupported schemas fail visibly. They are not automatically reset. Browser recovery storage is an additional draft safeguard, not a substitute for backing up the data directory.
 

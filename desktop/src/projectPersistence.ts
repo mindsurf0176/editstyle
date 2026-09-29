@@ -62,6 +62,7 @@ export function validateEditingState(value: unknown): asserts value is ProjectEd
     || !['draft', 'balanced', 'high'].includes(String(value.render_preset))
     || !['burned', 'sidecar'].includes(String(value.subtitle_export_mode))
     || typeof value.transcribe_on_import !== 'boolean'
+    || (value.playhead_time !== undefined && (!finite(value.playhead_time) || value.playhead_time < 0))
     || !(value.planning_style_preset === null || (record(value.planning_style_preset)
       && typeof value.planning_style_preset.name === 'string'
       && typeof value.planning_style_preset.description === 'string'))) {
@@ -92,6 +93,7 @@ function canonical(value: unknown): unknown {
 }
 export function sameEditingState(a: ProjectEditingState, b: ProjectEditingState): boolean {
   const normalize = (state: ProjectEditingState) => ({ ...state,
+    playhead_time: state.playhead_time === undefined ? 0 : state.playhead_time,
     planning_style_preset: state.planning_style_preset
       ? { file: null, style: null, ...state.planning_style_preset } : null,
   });
@@ -103,7 +105,7 @@ export function editingState(state: AppState): ProjectEditingState {
     edit_plan: state.editPlan, undo_stack: state.commandUndoStack.slice(0, 20),
     preview_resolution: state.previewResolution, render_preset: state.renderPreset,
     subtitle_export_mode: state.subtitleExportMode, planning_style_preset: state.planningStylePreset,
-    transcribe_on_import: state.transcribeOnImport,
+    transcribe_on_import: state.transcribeOnImport, playhead_time: state.playheadTime,
   };
 }
 
